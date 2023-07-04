@@ -12,13 +12,13 @@ A wrapper around opentelemetry and set of instrumentation applications. This is 
 ## Instalation
 
 ```
-npm install @saidsef/trace-node --save
+npm install @saidsef/tracing-node --save
 ```
 
 ## Usage
 
 ```
-const { setupTracing } = require('@saidsef/tace-node');
+const { setupTracing } = require('@saidsef/tacing-node');
 setupTracing('hostname', 'application_name', 'endpoint')
 ```
 
