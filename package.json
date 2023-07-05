@@ -1,11 +1,12 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.0.4",
+  "version": "1.1.1",
   "description": "tracing NodeJS - This is wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
     "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.js",
-    "lint": "eslint libs"
+    "lint": "eslint libs",
+    "rebuild": "rm -rfv node_modules/ package-lock.json && npm install"
   },
   "private": false,
   "repository": {
@@ -35,7 +36,7 @@
   },
   "homepage": "https://github.com/saidsef/tracing-nodejs#readme",
   "dependencies": {
-    "@opentelemetry/api": "^1.3.0",
+    "@opentelemetry/api": "^1.4.1",
     "@opentelemetry/exporter-collector-grpc": "^0.25.0",
     "@opentelemetry/instrumentation": "^0.40.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.34.3",

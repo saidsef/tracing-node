@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [ 18, 19, 20 ]
+    name: Node ${{ matrix.node }} test
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3
+      - name: Run linting rules and tests
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: NPM Rebuild
+        run: npm run rebuild
+      - name: NPM Lint
+        run: npm run lint
+      - name: NPM Test
+        run: npm run test
