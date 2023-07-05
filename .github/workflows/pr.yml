@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: NPM Rebuild
-        run: npm run ci
+        run: npm ci
       - name: NPM Lint
         run: npm run lint
       - name: NPM Test

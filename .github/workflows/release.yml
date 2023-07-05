@@ -66,7 +66,7 @@ jobs:
           result-encoding: string
           script: |
             const { repo: { owner, repo }, sha } = context;
-            const tag = process.env.DATE;
+            const tag = process.env.PACKAGE;
             let release_id = 0;
 
             try {
@@ -96,8 +96,8 @@ jobs:
   npm:
     runs-on: ubuntu-latest
     if: ${{ contains(github.ref, 'main') }}
-    name: GitHub Release
-    needs: [tagging]
+    name: NPM Release
+    needs: [tagging, release]
     steps:
       - name: Git Checkout
         uses: actions/checkout@v3
