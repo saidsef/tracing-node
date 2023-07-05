@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "libs/*"
+      - "libs/**"
       - package.json
       - package-lock.json
-      - ".github/workflows/*"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 jobs:
