@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "libs/**"
+      - package.json
+      - package-lock.json
+      - ".github/workflows/**"
   workflow_dispatch:
 
 jobs:
@@ -105,4 +110,5 @@ jobs:
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          npm set "//registry.npmjs.org/:_authToken" ${{ secrets.NPM_TOKEN }}
           npm publish
