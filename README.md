@@ -1,4 +1,9 @@
-# Opentelemetry Wrapper for Tracing Node Applications
+# Opentelemetry Wrapper for Tracing Node Applications 
+
+[![CI](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml/badge.svg)](#Instalation) [![Release](https://github.com/saidsef/tracing-node/actions/workflows/release.yml/badge.svg)](#Instalation) ![GitHub issues](https://img.shields.io/github/issues/saidsef/tracing-node)
+ ![npm](https://img.shields.io/npm/v/%40saidsef%2Ftracing-node) ![npm](https://img.shields.io/npm/dt/%40saidsef/tracing-node)
+
+
 
 Get telemetry for your app in less than 3 minutes!
 

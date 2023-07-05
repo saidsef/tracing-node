@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      matrix:
+        node: [ 18, 19, 20 ]
+    name: Node ${{ matrix.node }} test
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3
+      - name: Run linting rules and tests
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: NPM Rebuild
+        run: npm run rebuild
+      - name: NPM Lint
+        run: npm run lint
+      - name: NPM Test
+        run: npm run test
+
+  auto-approve:
+    runs-on: ubuntu-latest
+    needs: [test]
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+    - name: Auto Approve PR
+      uses: actions/github-script@v6
+      with:
+       script: |
+        github.rest.pulls.createReview({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          pull_number: context.issue.number,
+          event: "APPROVE"
+        })

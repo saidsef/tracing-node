@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  tagging:
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.ref, 'main') }}
+    name: GitHub Tagging
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3
+      - name: Set application version
+        run: |
+          echo "PACKAGE=v$(echo `cat package.json | jq -r .version`)" >> $GITHUB_ENV
+      - name: Create Tag
+        uses: actions/github-script@v6
+        if: ${{ env.PACKAGE }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            let tagExists = [];
+            try {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: "refs/tags/${{ env.PACKAGE }}",
+                sha: context.sha
+              });
+            } catch (e) {
+              console.log("Tag already exists: " + e)
+              tagExists.push(e);
+            }
+
+            if (tagExists.length > 0) {
+              await github.rest.git.updateRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: "tags/${{ env.PACKAGE }}",
+                sha: context.sha
+              });
+            }
+
+
+  release:
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.ref, 'main') }}
+    name: GitHub Release
+    needs: [tagging]
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3
+      - name: Set application version
+        run: |
+          echo "PACKAGE=v$(echo `cat package.json | jq -r .version`)" >> $GITHUB_ENV
+      - name: Create Release
+        uses: actions/github-script@v6
+        id: release
+        if: ${{ env.PACKAGE }}
+        with:
+          github-token: ${{ github.token }}
+          result-encoding: string
+          script: |
+            const { repo: { owner, repo }, sha } = context;
+            const tag = process.env.DATE;
+            let release_id = 0;
+
+            try {
+              const release = await github.rest.repos.createRelease({
+                owner, repo,
+                tag_name: tag,
+                title: tag,
+                name: tag,
+                draft: false,
+                make_latest: "true",
+                target_commitish: sha
+              });
+
+              release_id = release.data.id;
+            } catch (e) {
+              let latest;
+              if (e.status == 422) { // Release alredy exists
+                latest = await github.rest.repos.getLatestRelease({
+                  owner, repo
+                });
+              }
+              release_id = latest.data.id;
+            }
+
+            return release_id
+
+  npm:
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.ref, 'main') }}
+    name: GitHub Release
+    needs: [tagging]
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3
+      - name: NPM Release
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish
