@@ -19,15 +19,17 @@
 const { registerInstrumentations } = require('@opentelemetry/instrumentation');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { CollectorTraceExporter } = require('@opentelemetry/exporter-collector-grpc');
+const { OTLPTraceExporter } =  require('@opentelemetry/exporter-trace-otlp-grpc');
+const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-grpc');
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
 const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
-const { PeriodicExportingMetricReader, ConsoleMetricExporter } = require('@opentelemetry/sdk-metrics');
-const { AWSXRayPropagator } = require('@opentelemetry/propagator-aws-xray');
+const { PinoInstrumentation } = require('@opentelemetry/instrumentation-pino');
+const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
+const { JaegerPropagator } = require('@opentelemetry/propagator-jaeger');
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -43,7 +45,7 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
   });
 
   // Configure exporter with the Collector endpoint - uses gRPC
-  const exporter = new CollectorTraceExporter({
+  const exporter = new OTLPTraceExporter({
     serviceName: serviceName,
     url: endpoint,
   });
@@ -55,7 +57,8 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
   registerInstrumentations({
     tracerProvider: provider,
     metricReader: new PeriodicExportingMetricReader({
-      exporter: new ConsoleMetricExporter()
+      exporter: new OTLPMetricExporter(),
+      exportIntervalMillis: 1000
     }),
     instrumentations: [
       new ExpressInstrumentation({
@@ -77,11 +80,16 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
       new AwsInstrumentation({
         sqsExtractContextPropagationFromPayload: true
       }),
+      new PinoInstrumentation({
+        logHook: (span, record) => {
+          record['resource.service.name'] = provider.resource.attributes['service.name'];
+        },
+      })
     ],
   });
 
   // Initialize the tracer provider
-  provider.register({propagator: new AWSXRayPropagator()});
+  provider.register({propagator: new JaegerPropagator()});
 
   // Return the tracer for the service
   return provider.getTracer(serviceName);
