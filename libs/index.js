@@ -20,7 +20,6 @@ const { registerInstrumentations } = require('@opentelemetry/instrumentation');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { OTLPTraceExporter } =  require('@opentelemetry/exporter-trace-otlp-grpc');
-const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-grpc');
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
 const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
@@ -28,7 +27,6 @@ const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
 const { PinoInstrumentation } = require('@opentelemetry/instrumentation-pino');
-const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { JaegerPropagator } = require('@opentelemetry/propagator-jaeger');
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -45,21 +43,17 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
   });
 
   // Configure exporter with the Collector endpoint - uses gRPC
-  const exporter = new OTLPTraceExporter({
+  const exportOptions = {
     serviceName: serviceName,
     url: endpoint,
-  });
+  };
 
   // Register the span processor with the tracer provider
-  provider.addSpanProcessor(new BatchSpanProcessor(exporter));
+  provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter(exportOptions)));
 
   // Register instrumentations
   registerInstrumentations({
     tracerProvider: provider,
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter(),
-      exportIntervalMillis: 1000
-    }),
     instrumentations: [
       new ExpressInstrumentation({
         ignoreIncomingRequestHook(req) {
