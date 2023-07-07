@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.6.4",
+  "version": "1.7.1",
   "description": "tracing NodeJS - This is wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
@@ -14,19 +14,19 @@
     "url": "git+https://github.com/saidsef/tracing-nodejs.git"
   },
   "keywords": [
-    "trace",
-    "tracing",
-    "opentelemetry",
     "instrumentation-aws-sdk",
-    "instrumentation",
     "instrumentation-express",
     "instrumentation-http",
+    "instrumentation-pino",
+    "instrumentation",
+    "opentelemetry",
     "propagator-jaeger",
     "resources",
-    "sdk-metrics",
     "sdk-trace-base",
     "sdk-trace-node",
-    "semantic-conventions"
+    "semantic-conventions",
+    "trace",
+    "tracing"
   ],
   "author": "Said Sef <saidsef@gmail.com>",
   "license": "Apache-2.0",
@@ -36,7 +36,6 @@
   "homepage": "https://github.com/saidsef/tracing-nodejs#readme",
   "dependencies": {
     "@opentelemetry/api": "^1.4.1",
-    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.40.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.40.0",
     "@opentelemetry/instrumentation": "^0.40.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.34.3",
@@ -45,7 +44,6 @@
     "@opentelemetry/instrumentation-pino": "^0.33.4",
     "@opentelemetry/propagator-jaeger": "^1.14.0",
     "@opentelemetry/resources": "^1.14.0",
-    "@opentelemetry/sdk-metrics": "^1.14.0",
     "@opentelemetry/sdk-trace-base": "^1.14.0",
     "@opentelemetry/sdk-trace-node": "^1.14.0",
     "@opentelemetry/semantic-conventions": "^1.14.0"
