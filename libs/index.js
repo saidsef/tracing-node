@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+const { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { registerInstrumentations } = require('@opentelemetry/instrumentation');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
@@ -27,7 +28,9 @@ const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
 const { PinoInstrumentation } = require('@opentelemetry/instrumentation-pino');
-const { JaegerPropagator } = require('@opentelemetry/propagator-jaeger');
+const { DnsInstrumentation } = require('@opentelemetry/instrumentation-dns');
+const { containerDetector } = require('@opentelemetry/resource-detector-container');
+const { B3Propagator, B3InjectEncoding } = require('@opentelemetry/propagator-b3');
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -39,6 +42,7 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
       [SemanticResourceAttributes.CONTAINER_NAME]: serviceName,
       [SemanticResourceAttributes.HOST_NAME]: serviceName,
       instrumentationLibrarySemanticConvention: true,
+      detectors: [containerDetector]
     }),
   });
 
@@ -51,25 +55,23 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
   // Register the span processor with the tracer provider
   provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter(exportOptions)));
 
+  // Ignore spans from static assets.
+  const ignoreIncomingRequestHook = (req) => {
+    const isStaticAsset = !!req.url.match(/^\/metrics|\/healthz.*$/);
+    return isStaticAsset;
+  }
+
   // Register instrumentations
   registerInstrumentations({
     tracerProvider: provider,
     instrumentations: [
-      new ExpressInstrumentation({
-        ignoreIncomingRequestHook(req) {
-          // Ignore spans from static assets.
-          const isStaticAsset = !!req.url.match(/^\/metrics.*$/);
-          return isStaticAsset;
-        }
-      }),
       new HttpInstrumentation({
         requireParentforOutgoingSpans: false,
         requireParentforIncomingSpans: false,
-        ignoreIncomingRequestHook(req) {
-          // Ignore spans from static assets.
-          const isStaticAsset = !!req.url.match(/^\/metrics.*$/);
-          return isStaticAsset;
-        }
+        ignoreIncomingRequestHook,
+      }),
+      new ExpressInstrumentation({
+        ignoreIncomingRequestHook,
       }),
       new AwsInstrumentation({
         sqsExtractContextPropagationFromPayload: true
@@ -78,12 +80,16 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
         logHook: (span, record) => {
           record['resource.service.name'] = provider.resource.attributes['service.name'];
         },
-      })
+      }),
+      new DnsInstrumentation(),
     ],
   });
 
   // Initialize the tracer provider
-  provider.register({propagator: new JaegerPropagator()});
+  provider.register({
+    propagator: new CompositePropagator({
+      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER })],
+  })});
 
   // Return the tracer for the service
   return provider.getTracer(serviceName);
