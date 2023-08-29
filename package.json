@@ -43,7 +43,6 @@
     "@opentelemetry/instrumentation-http": "^0.41.0",
     "@opentelemetry/instrumentation-pino": "^0.34.1",
     "@opentelemetry/propagator-b3": "^1.15.2",
-    "@opentelemetry/resource-detector-container": "^0.3.1",
     "@opentelemetry/resources": "^1.14.0",
     "@opentelemetry/sdk-trace-base": "^1.14.0",
     "@opentelemetry/sdk-trace-node": "^1.14.0",
