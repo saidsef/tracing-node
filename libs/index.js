@@ -29,7 +29,6 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
 const { PinoInstrumentation } = require('@opentelemetry/instrumentation-pino');
 const { DnsInstrumentation } = require('@opentelemetry/instrumentation-dns');
-const { containerDetector } = require('@opentelemetry/resource-detector-container');
 const { B3Propagator, B3InjectEncoding } = require('@opentelemetry/propagator-b3');
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -42,7 +41,6 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
       [SemanticResourceAttributes.CONTAINER_NAME]: serviceName,
       [SemanticResourceAttributes.HOST_NAME]: serviceName,
       instrumentationLibrarySemanticConvention: true,
-      detectors: [containerDetector]
     }),
   });
 
