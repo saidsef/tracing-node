@@ -18,7 +18,7 @@ jobs:
     name: GitHub Tagging
     steps:
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set application version
         run: |
           echo "PACKAGE=v$(echo `cat package.json | jq -r .version`)" >> $GITHUB_ENV
@@ -58,7 +58,7 @@ jobs:
     needs: [tagging]
     steps:
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set application version
         run: |
           echo "PACKAGE=v$(echo `cat package.json | jq -r .version`)" >> $GITHUB_ENV
@@ -105,7 +105,7 @@ jobs:
     needs: [tagging, release]
     steps:
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: NPM Release
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
