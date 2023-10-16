@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.8.7",
+  "version": "1.8.8",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
@@ -36,7 +36,7 @@
   "dependencies": {
     "@opentelemetry/api": "^1.6.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.43.0",
-    "@opentelemetry/instrumentation": "^0.43.0",
+    "@opentelemetry/instrumentation": "^0.44.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.36.0",
     "@opentelemetry/instrumentation-dns": "^0.32.2",
     "@opentelemetry/instrumentation-express": "^0.33.1",
