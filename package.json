@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.8.13",
+  "version": "1.8.14",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
@@ -49,6 +49,6 @@
     "@opentelemetry/semantic-conventions": "^1.17.0"
   },
   "devDependencies": {
-    "eslint": "8.51.0"
+    "eslint": "8.52.0"
   }
 }
