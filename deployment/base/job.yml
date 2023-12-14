@@ -13,14 +13,22 @@ spec:
   containers:
   - name: tracing-node
     image: docker.io/node:20-alpine3.19
+    workingDir: "/app"
+    command:
+      - /bin/sh
     args:
-      - node
-      - libs/index.js
+      - -c
+      - "npm install && node libs/index.js"
     resources:
       limits:
-        memory: "128Mi"
-        cpu: "100m"
-    securityContext:
-      capabilities:
-        drop:
-          - ALL
+        memory: "1Gi"
+        cpu: "500m"
+    volumeMounts:
+      - name: git
+        mountPath: /app
+  volumes:
+    - name: git
+      gitRepo:
+        directory: "."
+        repository: "https://github.com/saidsef/tracing-node.git"
+        revision: "add-test-job"
