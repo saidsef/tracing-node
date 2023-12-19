@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.8.19",
+  "version": "1.8.20",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
@@ -43,12 +43,12 @@
     "@opentelemetry/instrumentation-http": "^0.45.1",
     "@opentelemetry/instrumentation-pino": "^0.34.1",
     "@opentelemetry/propagator-b3": "^1.17.0",
-    "@opentelemetry/resources": "^1.17.0",
-    "@opentelemetry/sdk-trace-base": "^1.17.1",
-    "@opentelemetry/sdk-trace-node": "^1.17.0",
-    "@opentelemetry/semantic-conventions": "^1.17.0"
+    "@opentelemetry/resources": "^1.19.0",
+    "@opentelemetry/sdk-trace-base": "^1.19.0",
+    "@opentelemetry/sdk-trace-node": "^1.19.0",
+    "@opentelemetry/semantic-conventions": "^1.19.0"
   },
   "devDependencies": {
-    "eslint": "8.55.0"
+    "eslint": "8.56.0"
   }
 }
