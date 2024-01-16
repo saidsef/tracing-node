@@ -31,4 +31,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "deps-modules"
+        revision: "opentel-deps-update"
