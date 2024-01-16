@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.8.23",
+  "version": "1.8.24",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.js",
   "scripts": {
@@ -36,17 +36,17 @@
   "dependencies": {
     "@opentelemetry/api": "^1.7.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.46.0",
-    "@opentelemetry/instrumentation": "^0.46.0",
+    "@opentelemetry/instrumentation": "^0.47.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.37.0",
     "@opentelemetry/instrumentation-dns": "^0.32.5",
     "@opentelemetry/instrumentation-express": "^0.34.1",
     "@opentelemetry/instrumentation-http": "^0.46.0",
     "@opentelemetry/instrumentation-pino": "^0.34.5",
-    "@opentelemetry/propagator-b3": "^1.17.0",
-    "@opentelemetry/resources": "^1.19.0",
-    "@opentelemetry/sdk-trace-base": "^1.19.0",
-    "@opentelemetry/sdk-trace-node": "^1.19.0",
-    "@opentelemetry/semantic-conventions": "^1.19.0"
+    "@opentelemetry/propagator-b3": "^1.20.0",
+    "@opentelemetry/resources": "^1.20.0",
+    "@opentelemetry/sdk-trace-base": "^1.20.0",
+    "@opentelemetry/sdk-trace-node": "^1.20.0",
+    "@opentelemetry/semantic-conventions": "^1.20.0"
   },
   "devDependencies": {
     "eslint": "8.56.0"
