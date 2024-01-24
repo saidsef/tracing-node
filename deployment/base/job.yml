@@ -31,4 +31,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "dependabot-npm_and_yarn-opentelemetry-instrumentation-dns-0.32.5"
+        revision: "instrumentation-http-grcp"
