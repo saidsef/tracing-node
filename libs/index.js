@@ -33,7 +33,14 @@ const { B3Propagator, B3InjectEncoding } = require('@opentelemetry/propagator-b3
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
-function setupTracing(serviceName, appName="application", endpoint=null) {
+/**
+* Sets up tracing for the application with OpenTelemetry.
+* @param {string} serviceName - The name of the service to trace.
+* @param {string} [appName="application"] - The name of the application.
+* @param {string|null} [endpoint=null] - The endpoint for the tracing collector.
+* @returns {Tracer} - The tracer instance for the service.
+*/
+module.exports.setupTracing = (serviceName, appName="application", endpoint=null) => {
   const provider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
@@ -92,5 +99,3 @@ function setupTracing(serviceName, appName="application", endpoint=null) {
   // Return the tracer for the service
   return provider.getTracer(serviceName);
 }
-
-module.exports.setupTracing = setupTracing;

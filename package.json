@@ -49,6 +49,7 @@
     "@opentelemetry/semantic-conventions": "^1.21.0"
   },
   "devDependencies": {
-    "eslint": "8.56.0"
+    "eslint": "8.56.0",
+    "sinon": "^17.0.1"
   }
 }
