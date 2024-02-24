@@ -38,7 +38,7 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * @param {string} serviceName - The name of the service to trace.
 * @param {string} [appName="application"] - The name of the application.
 * @param {string|null} [endpoint=null] - The endpoint for the tracing collector.
-* @returns {Tracer} - The tracer instance for the service.
+* @returns {NodeTracerProvider} - The NodeTracerProvider instance for the service.
 */
 module.exports.setupTracing = (serviceName, appName="application", endpoint=null) => {
   const provider = new NodeTracerProvider({
