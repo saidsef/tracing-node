@@ -5,7 +5,7 @@
   "main": "libs/index.mjs",
   "scripts": {
     "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.js",
-    "lint": "eslint libs",
+    "lint": "eslint --ext js,mjs libs",
     "rebuild": "rm -rfv node_modules/ package-lock.json && NODE_ENV=production npm install"
   },
   "type": "module",
