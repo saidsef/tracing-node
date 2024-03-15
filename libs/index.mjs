@@ -16,31 +16,46 @@
  * limitations under the License.
  */
 
-const { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } = require('@opentelemetry/core');
-const { registerInstrumentations } = require('@opentelemetry/instrumentation');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
-const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { OTLPTraceExporter } =  require('@opentelemetry/exporter-trace-otlp-grpc');
-const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
-const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
-const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
-const { Resource } = require('@opentelemetry/resources');
-const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
-const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
-const { PinoInstrumentation } = require('@opentelemetry/instrumentation-pino');
-const { DnsInstrumentation } = require('@opentelemetry/instrumentation-dns');
-const { B3Propagator, B3InjectEncoding } = require('@opentelemetry/propagator-b3');
+import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from '@opentelemetry/core';
+import { registerInstrumentations } from '@opentelemetry/instrumentation';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk';
+import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
+import { DnsInstrumentation } from '@opentelemetry/instrumentation-dns';
+import { B3Propagator, B3InjectEncoding } from '@opentelemetry/propagator-b3';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
 /**
-* Sets up tracing for the application with OpenTelemetry.
-* @param {string} serviceName - The name of the service to trace.
-* @param {string} [appName="application"] - The name of the application.
-* @param {string|null} [endpoint=null] - The endpoint for the tracing collector.
-* @returns {NodeTracerProvider} - The NodeTracerProvider instance for the service.
+* Sets up tracing for a given service, allowing for the collection and export of trace data.
+* This function configures a NodeTracerProvider with specific resource attributes, including
+* service name, namespace, and host. It also configures an exporter using the OTLP protocol
+* over gRPC, with the option to specify an endpoint. Instrumentations for HTTP, Express,
+* AWS, Pino, and DNS are registered to capture relevant spans. The function finally returns
+* a tracer specific to the service for initiating and exporting spans.
+*
+* @param {string} serviceName - The name of the service to be traced. This will be used to
+* label traces and is essential for identifying traces belonging
+* to this service.
+* @param {string} [appName="application"] - The namespace or application name the service
+* belongs to. This helps in grouping services under
+* a common namespace for better trace organization.
+* @param {string|null} [endpoint=null] - The endpoint URL for the OTLP gRPC exporter. If not
+* provided, the exporter will default to its standard
+* configuration, which might not be suitable for all
+* deployments.
+* @returns {Tracer} - Returns a Tracer instance configured for the service. This tracer can
+* be used to create and export spans for tracing various operations within
+* the service.
 */
-module.exports.setupTracing = (serviceName, appName="application", endpoint=null) => {
+export const setupTracing = (serviceName, appName="application", endpoint=null) => {
   const provider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
