@@ -31,4 +31,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "ins-dns-express-otlp-sdk"
+        revision: "es12-module"
