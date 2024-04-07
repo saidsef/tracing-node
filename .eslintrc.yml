@@ -8,3 +8,5 @@ parserOptions:
   ecmaVersion: latest
   sourceType: module
 rules: {}
+overrides:
+  - files: ["*.js", "*.mjs"]

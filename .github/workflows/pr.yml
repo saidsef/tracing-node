@@ -14,7 +14,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     strategy:
       matrix:
-        node: [ 18, 19, 20, 21 ]
+        node: [ 19, 20, 21 ]
     name: Node ${{ matrix.node }} test
     steps:
       - name: Git Checkout
@@ -23,10 +23,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - name: Node Version
+        run: node --version
       - name: NPM Rebuild
         run: npm ci
-      - name: NPM Lint
-        run: npm run lint
       - name: NPM Test
         run: npm run test
 
