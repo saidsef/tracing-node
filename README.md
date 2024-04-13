@@ -23,12 +23,12 @@ npm install @saidsef/tracing-node --save
 ## Usage
 
 ```
-const setupTracing = require('@saidsef/tracing-node');
+const { setupTracing } = require('@saidsef/tracing-node');
 setupTracing('hostname', 'application_name', 'endpoint');
 ```
 
 ```
-import setupTracing from '@saidsef/tracing-node';
+import { setupTracing } from '@saidsef/tracing-node';
 setupTracing('hostname', 'application_name', 'endpoint');
 ```
 

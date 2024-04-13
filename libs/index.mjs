@@ -55,7 +55,7 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * be used to create and export spans for tracing various operations within
 * the service.
 */
-export default function setupTracing (serviceName, appName="application", endpoint=null) {
+export async function setupTracing (serviceName, appName="application", endpoint=null) {
   const provider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
@@ -112,5 +112,5 @@ export default function setupTracing (serviceName, appName="application", endpoi
   })});
 
   // Return the tracer for the service
-  return provider.getTracer(serviceName);
+  return await provider.getTracer(serviceName);
 }
