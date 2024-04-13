@@ -31,7 +31,7 @@
   "author": "Said Sef <saidsef@gmail.com>",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">= 19"
+    "node": ">= 20"
   },
   "bugs": {
     "url": "https://github.com/saidsef/tracing-nodejs/issues"
