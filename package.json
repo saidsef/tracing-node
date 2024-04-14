@@ -1,11 +1,11 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
     "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.mjs",
-    "lint": "eslint libs -c .eslintrc.yml ",
+    "lint": "eslint .",
     "rebuild": "rm -rfv node_modules/ package-lock.json && npm install --prod --omit=dev"
   },
   "type": "module",
@@ -53,7 +53,7 @@
     "@opentelemetry/semantic-conventions": "^1.22.0"
   },
   "devDependencies": {
-    "eslint": "9.0.0",
+    "eslint": "^8.57.0",
     "jest": "^29.7.0"
   }
 }
