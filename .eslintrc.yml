@@ -1,12 +1,26 @@
 env:
-  browser: true
-  commonjs: true
+  node: true
+  commonjs: false
   es2021: true
-  jest: true
 extends: eslint:recommended
 parserOptions:
   ecmaVersion: latest
   sourceType: module
-rules: {}
+rules:
+  "prefer-const": ["error", { "ignoreReadBeforeAssign": true }]
+  arrow-spacing: ["error", { "before": true, "after": true }]
+  computed-property-spacing: ["error", "never"]
+  eol-last: ["error", "always"]
+  no-compare-neg-zero: "error"
+  no-tabs: ["error", { allowIndentationTabs: true }]
+  no-trailing-spaces: "error"
+  no-unused-vars: "error"
+  no-whitespace-before-property: "error"
+  object-curly-spacing: ["error", "never"]
+  quotes: ["warn", "single"]
+  rest-spread-spacing: ["error", "always"]
+  semi: ["warn", "always"]
+  space-before-blocks: "error"
+  template-curly-spacing: "error"
 overrides:
-  - files: ["*.js", "*.mjs"]
+  - files: [ "libs/index.mjs"]

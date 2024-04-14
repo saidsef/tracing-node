@@ -16,20 +16,20 @@
  * limitations under the License.
  */
 
-import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from '@opentelemetry/core';
-import { registerInstrumentations } from '@opentelemetry/instrumentation';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk';
-import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
-import { DnsInstrumentation } from '@opentelemetry/instrumentation-dns';
-import { B3Propagator, B3InjectEncoding } from '@opentelemetry/propagator-b3';
+import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
+import {registerInstrumentations} from '@opentelemetry/instrumentation';
+import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
+import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
+import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
+import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {Resource} from '@opentelemetry/resources';
+import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
+import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
+import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
+import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
+import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -55,7 +55,7 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * be used to create and export spans for tracing various operations within
 * the service.
 */
-export async function setupTracing (serviceName, appName="application", endpoint=null) {
+export async function setupTracing (serviceName, appName='application', endpoint=null) {
   const provider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
@@ -79,7 +79,7 @@ export async function setupTracing (serviceName, appName="application", endpoint
   const ignoreIncomingRequestHook = (req) => {
     const isStaticAsset = !!req.url.match(/^\/metrics|\/healthz.*$/);
     return isStaticAsset;
-  }
+  };
 
   // Register instrumentations
   registerInstrumentations({
@@ -108,7 +108,7 @@ export async function setupTracing (serviceName, appName="application", endpoint
   // Initialize the tracer provider
   provider.register({
     propagator: new CompositePropagator({
-      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER })],
+      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({injectEncoding: B3InjectEncoding.MULTI_HEADER})],
   })});
 
   // Return the tracer for the service

@@ -25,8 +25,10 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Node Version
         run: node --version
-      - name: NPM Rebuild
+      - name: NPM Install
         run: npm ci
+      - name: NPM ESLint
+        run: npm run lint
       - name: NPM Test
         run: npm run test
 
