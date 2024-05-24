@@ -18,7 +18,7 @@ spec:
       - /bin/sh
     args:
       - -c
-      - "npm install && node libs/index.mjs"
+      - "npm install && node libs/index.mjs && npm run test"
     resources:
       limits:
         memory: "1Gi"
