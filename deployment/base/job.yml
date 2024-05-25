@@ -18,7 +18,7 @@ spec:
       - /bin/sh
     args:
       - -c
-      - "npm install && node libs/index.mjs"
+      - "npm install && node libs/index.mjs && npm run test"
     resources:
       limits:
         memory: "1Gi"
@@ -31,4 +31,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "es12-module"
+        revision: "dependabot-npm_and_yarn-opentelemetry-instrumentation-express-0.39.0"
