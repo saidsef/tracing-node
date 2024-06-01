@@ -66,7 +66,7 @@ export function setupTracing (options={}) {
 
   const provider = new NodeTracerProvider({
     resource: new Resource({
-      [SemanticResourceAttributes.CONTAINER_NAME]: containerName,
+      [SemanticResourceAttributes.CONTAINER_NAME]: containerName || serviceName,
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
       [SemanticResourceAttributes.HOSTNAME]: hostname,
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
