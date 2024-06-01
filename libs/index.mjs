@@ -41,33 +41,47 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * tracing for HTTP, Express, AWS, Pino, and DNS.
 *
 * @param {Object} options - Configuration options for tracing.
-* @param {string} [options.serviceName=process.env.HOSTNAME] - The name of the service.
-* @param {string} [options.appName=process.env.APP_NAME] - The name of the application.
-* @param {string} [options.endpoint=process.env.ENDPOINT] - The endpoint for the trace exporter.
+* @param {string} [options.containerName=process.env.CONTAINER_NAME] - The name of the container.
+* @param {string} [options.deploymentEnvironment=process.env.NODE_ENV] - The deployment environment.
+* @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
+* @param {string} [options.serviceName=process.env.SERVICE_NAME] - The name of the service.
+* @param {string} [options.serviceNameSpace=process.env.NAME_SPACE || 'default'] - The namespace of the service.
+* @param {string} [options.serviceVersion=process.env.SERVICE_VERSION || '0.0.0'] - The version of the service.
+* @param {string} [options.url=process.env.ENDPOINT] - The endpoint URL for the tracing collector.
+* @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
 *
 * @returns {Tracer} - The tracer for the service.
 */
 export function setupTracing (options={}) {
   const {
-    serviceName = process.env.HOSTNAME,
-    appName = process.env.APP_NAME,
-    endpoint = process.env.ENDPOINT
+    containerName = process.env.CONTAINER_NAME,
+    deploymentEnvironment = process.env.NODE_ENV,
+    hostname = process.env.HOSTNAME,
+    serviceName = process.env.SERVICE_NAME,
+    serviceNameSpace = process.env.NAME_SPACE || 'default',
+    serviceVersion = process.env.SERVICE_VERSION || '0.0.0',
+    url = process.env.ENDPOINT,
+    concurrencyLimit = 10,
   } = options;
 
   const provider = new NodeTracerProvider({
     resource: new Resource({
+      [SemanticResourceAttributes.CONTAINER_NAME]: containerName,
+      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
+      [SemanticResourceAttributes.HOSTNAME]: hostname,
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-      [SemanticResourceAttributes.SERVICE_NAMESPACE]: appName,
-      [SemanticResourceAttributes.CONTAINER_NAME]: serviceName,
-      [SemanticResourceAttributes.HOST_NAME]: serviceName,
+      [SemanticResourceAttributes.SERVICE_NAMESPACE]: serviceNameSpace,
+      [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion || '0.0.0',
+      [SemanticResourceAttributes.URL]: url,
       instrumentationLibrarySemanticConvention: true,
     }),
   });
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
-    serviceName: serviceName,
-    url: endpoint,
+    concurrencyLimit: concurrencyLimit,
+    url: url,
+    timeoutMillis: 1000,
   };
 
   // Register the span processor with the tracer provider
