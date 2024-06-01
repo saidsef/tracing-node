@@ -34,28 +34,26 @@ import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
 /**
-* Sets up tracing for a given service, allowing for the collection and export of trace data.
-* This function configures a NodeTracerProvider with specific resource attributes, including
-* service name, namespace, and host. It also configures an exporter using the OTLP protocol
-* over gRPC, with the option to specify an endpoint. Instrumentations for HTTP, Express,
-* AWS, Pino, and DNS are registered to capture relevant spans. The function finally returns
-* a tracer specific to the service for initiating and exporting spans.
+* Sets up tracing for the application using OpenTelemetry.
 *
-* @param {string} serviceName - The name of the service to be traced. This will be used to
-* label traces and is essential for identifying traces belonging
-* to this service.
-* @param {string} [appName="application"] - The namespace or application name the service
-* belongs to. This helps in grouping services under
-* a common namespace for better trace organization.
-* @param {string|null} [endpoint=null] - The endpoint URL for the OTLP gRPC exporter. If not
-* provided, the exporter will default to its standard
-* configuration, which might not be suitable for all
-* deployments.
-* @returns {Tracer} - Returns a Tracer instance configured for the service. This tracer can
-* be used to create and export spans for tracing various operations within
-* the service.
+* This function configures a NodeTracerProvider with various instrumentations
+* and span processors to enable tracing for the application. It supports
+* tracing for HTTP, Express, AWS, Pino, and DNS.
+*
+* @param {Object} options - Configuration options for tracing.
+* @param {string} [options.serviceName=process.env.HOSTNAME] - The name of the service.
+* @param {string} [options.appName=process.env.APP_NAME] - The name of the application.
+* @param {string} [options.endpoint=process.env.ENDPOINT] - The endpoint for the trace exporter.
+*
+* @returns {Tracer} - The tracer for the service.
 */
-export function setupTracing (serviceName, appName='application', endpoint=null) {
+export function setupTracing (options={}) {
+  const { 
+    serviceName = process.env.HOSTNAME,
+    appName = process.env.APP_NAME,
+    endpoint = process.env.ENDPOINT
+  } = options;
+
   const provider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
