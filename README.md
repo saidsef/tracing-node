@@ -22,14 +22,28 @@ npm install @saidsef/tracing-node --save
 
 ## Usage
 
+You can set required params via env variables or function:
+
+Env vars:
+```
+CONTAINER_NAME
+NODE_ENV
+HOSTNAME
+SERVICE_NAME
+NAME_SPACE
+SERVICE_VERSION
+ENDPOINT
+```
+
+Function args
 ```
 const { setupTracing } = require('@saidsef/tracing-node');
-setupTracing('hostname', 'application_name', 'endpoint');
+setupTracing({hostname: 'hostname', serviceName: 'service_name', endpoint: 'endpoint'});
 ```
 
 ```
 import { setupTracing } from '@saidsef/tracing-node';
-setupTracing('hostname', 'application_name', 'endpoint');
+setupTracing({hostname: 'hostname', serviceName: 'service_name', endpoint: 'endpoint'});
 ```
 
 ### Required Parameters are
@@ -37,7 +51,7 @@ setupTracing('hostname', 'application_name', 'endpoint');
 | Name | Type | Description|
 |----- | ---- | ------------- |
 | hostname | string | container / pod hostname | 
-| application_name | string | service / application name |
+| service_name | string | service / application name |
 | endpoint | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
 
 ## Source
