@@ -48,7 +48,7 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * @returns {Tracer} - The tracer for the service.
 */
 export function setupTracing (options={}) {
-  const { 
+  const {
     serviceName = process.env.HOSTNAME,
     appName = process.env.APP_NAME,
     endpoint = process.env.ENDPOINT
