@@ -22,7 +22,10 @@ spec:
     resources:
       limits:
         memory: "1Gi"
-        cpu: "500m"
+        cpu: "80m"
+      requests:
+        memory: "1Gi"
+        cpu: "50m"
     volumeMounts:
       - name: git
         mountPath: /app
