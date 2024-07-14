@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: tracing-node
 spec:
-  activeDeadlineSeconds: 120
+  activeDeadlineSeconds: 240
   automountServiceAccountToken: false
   enableServiceLinks: false
   restartPolicy: Never
@@ -22,7 +22,10 @@ spec:
     resources:
       limits:
         memory: "1Gi"
-        cpu: "500m"
+        cpu: "80m"
+      requests:
+        memory: "1Gi"
+        cpu: "50m"
     volumeMounts:
       - name: git
         mountPath: /app
@@ -31,4 +34,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "dependabot-npm_and_yarn-opentelemetry-exporter-trace-otlp-grpc-0.52.1"
+        revision: "dep-libs-version-bump"
