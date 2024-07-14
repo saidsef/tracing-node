@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: tracing-node
 spec:
-  activeDeadlineSeconds: 120
+  activeDeadlineSeconds: 240
   automountServiceAccountToken: false
   enableServiceLinks: false
   restartPolicy: Never
