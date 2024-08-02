@@ -34,4 +34,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "snyk-upgrade-e6819faeee75cf2918fdfa0383960748"
+        revision: "version-bump"
