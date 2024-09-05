@@ -1,7 +1,12 @@
 # Opentelemetry Wrapper for Tracing Node Applications 
 
-[![CI](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml/badge.svg)](#Instalation) [![Release](https://github.com/saidsef/tracing-node/actions/workflows/release.yml/badge.svg)](#Instalation) ![GitHub issues](https://img.shields.io/github/issues/saidsef/tracing-node)
- ![npm](https://img.shields.io/npm/v/%40saidsef%2Ftracing-node) ![npm](https://img.shields.io/npm/dt/%40saidsef/tracing-node)
+[![CI](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml/badge.svg)](#Instalation)
+[![Release](https://github.com/saidsef/tracing-node/actions/workflows/release.yml/badge.svg)](#Instalation)
+![GitHub issues](https://img.shields.io/github/issues/saidsef/tracing-node)
+![npm](https://img.shields.io/npm/v/%40saidsef%2Ftracing-node) ![npm](https://img.shields.io/npm/dt/%40saidsef/tracing-node)
+![GitHub release(latest by date)](https://img.shields.io/github/v/release/saidsef/tracing-node)
+![Commits](https://img.shields.io/github/commits-since/saidsef/tracing-node/latest.svg)
+
 
 
 
