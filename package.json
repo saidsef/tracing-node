@@ -45,7 +45,7 @@
     "@opentelemetry/instrumentation-dns": "^0.39.0",
     "@opentelemetry/instrumentation-express": "^0.42.0",
     "@opentelemetry/instrumentation-http": "^0.52.1",
-    "@opentelemetry/instrumentation-pino": "^0.41.0",
+    "@opentelemetry/instrumentation-pino": "^0.42.0",
     "@opentelemetry/propagator-b3": "^1.25.1",
     "@opentelemetry/resources": "^1.25.1",
     "@opentelemetry/sdk-trace-base": "^1.25.1",
