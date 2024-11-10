@@ -17,9 +17,9 @@
  */
 
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
-import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
+import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
@@ -77,6 +77,12 @@ export function setupTracing (options={}) {
     }),
   });
 
+  // Initialize the tracer provider
+  provider.register({
+    propagator: new CompositePropagator({
+      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({injectEncoding: B3InjectEncoding.MULTI_HEADER})],
+  })});
+
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
     concurrencyLimit: concurrencyLimit,
@@ -97,31 +103,25 @@ export function setupTracing (options={}) {
   registerInstrumentations({
     tracerProvider: provider,
     instrumentations: [
-      new HttpInstrumentation({
-        requireParentforOutgoingSpans: false,
-        requireParentforIncomingSpans: false,
-        ignoreIncomingRequestHook,
-      }),
       new ExpressInstrumentation({
         ignoreIncomingRequestHook,
-      }),
-      new AwsInstrumentation({
-        sqsExtractContextPropagationFromPayload: true
       }),
       new PinoInstrumentation({
         logHook: (span, record) => {
           record['resource.service.name'] = provider.resource.attributes['service.name'];
         },
       }),
+      new HttpInstrumentation({
+        requireParentforOutgoingSpans: false,
+        requireParentforIncomingSpans: false,
+        ignoreIncomingRequestHook,
+      }),
+      new AwsInstrumentation({
+        sqsExtractContextPropagationFromPayload: true
+      }),
       new DnsInstrumentation(),
     ],
   });
-
-  // Initialize the tracer provider
-  provider.register({
-    propagator: new CompositePropagator({
-      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({injectEncoding: B3InjectEncoding.MULTI_HEADER})],
-  })});
 
   // Return the tracer for the service
   return provider.getTracer(serviceName);
