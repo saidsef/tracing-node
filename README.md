@@ -43,12 +43,12 @@ ENDPOINT
 Function args
 ```
 const { setupTracing } = require('@saidsef/tracing-node');
-setupTracing({hostname: 'hostname', serviceName: 'service_name', endpoint: 'endpoint'});
+setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
 ```
 
 ```
 import { setupTracing } from '@saidsef/tracing-node';
-setupTracing({hostname: 'hostname', serviceName: 'service_name', endpoint: 'endpoint'});
+setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
 ```
 
 ### Required Parameters are
@@ -57,7 +57,7 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', endpoint: 'endp
 |----- | ---- | ------------- |
 | hostname | string | container / pod hostname | 
 | service_name | string | service / application name |
-| endpoint | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
+| url | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
 
 ## Source
 
