@@ -20,16 +20,16 @@ import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} fr
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
-import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
-import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
+import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {Resource} from '@opentelemetry/resources';
 import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
-import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
+import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
-import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
