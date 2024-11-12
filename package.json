@@ -40,7 +40,7 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.53.0",
-    "@opentelemetry/instrumentation": "^0.53.0",
+    "@opentelemetry/instrumentation": "^0.54.2",
     "@opentelemetry/instrumentation-aws-sdk": "^0.46.0",
     "@opentelemetry/instrumentation-dns": "^0.40.0",
     "@opentelemetry/instrumentation-express": "^0.44.0",
