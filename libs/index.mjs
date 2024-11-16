@@ -52,7 +52,9 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 *
 * @returns {Tracer} - The tracer for the service.
 */
-export function setupTracing (options={}) {
+let tracerProvider = null; // Declare provider in module scope for access in stopTracing
+
+export function setupTracing(options = {}) {
   const {
     containerName = process.env.CONTAINER_NAME,
     deploymentEnvironment = process.env.NODE_ENV,
@@ -64,7 +66,7 @@ export function setupTracing (options={}) {
     concurrencyLimit = 10,
   } = options;
 
-  const provider = new NodeTracerProvider({
+  tracerProvider = new NodeTracerProvider({
     resource: new Resource({
       [SemanticResourceAttributes.CONTAINER_NAME]: containerName || serviceName,
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
@@ -77,11 +79,16 @@ export function setupTracing (options={}) {
     }),
   });
 
-  // Initialize the tracer provider
-  provider.register({
+  // Initialize the tracer provider with propagators
+  tracerProvider.register({
     propagator: new CompositePropagator({
-      propagators: [new W3CBaggagePropagator(), new W3CTraceContextPropagator(), new B3Propagator({injectEncoding: B3InjectEncoding.MULTI_HEADER})],
-  })});
+  propagators: [
+    new W3CBaggagePropagator(),
+    new W3CTraceContextPropagator(),
+    new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER }),
+  ],
+}),
+});
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
@@ -91,7 +98,9 @@ export function setupTracing (options={}) {
   };
 
   // Register the span processor with the tracer provider
-  provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter(exportOptions)));
+  const exporter = new OTLPTraceExporter(exportOptions);
+  const spanProcessor = new BatchSpanProcessor(exporter);
+  tracerProvider.addSpanProcessor(spanProcessor);
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
@@ -101,28 +110,50 @@ export function setupTracing (options={}) {
 
   // Register instrumentations
   registerInstrumentations({
-    tracerProvider: provider,
-    instrumentations: [
-      new ExpressInstrumentation({
-        ignoreIncomingRequestHook,
-      }),
-      new PinoInstrumentation({
-        logHook: (span, record) => {
-          record['resource.service.name'] = provider.resource.attributes['service.name'];
-        },
-      }),
-      new HttpInstrumentation({
-        requireParentforOutgoingSpans: false,
-        requireParentforIncomingSpans: false,
-        ignoreIncomingRequestHook,
-      }),
-      new AwsInstrumentation({
-        sqsExtractContextPropagationFromPayload: true
-      }),
-      new DnsInstrumentation(),
-    ],
-  });
+  tracerProvider: tracerProvider,
+  instrumentations: [
+    new ExpressInstrumentation({
+      ignoreIncomingRequestHook,
+    }),
+    new PinoInstrumentation({
+      logHook: (span, record) => {
+    record['resource.service.name'] = tracerProvider.resource.attributes['service.name'];
+  },
+}),
+  new HttpInstrumentation({
+    requireParentforOutgoingSpans: false,
+    requireParentforIncomingSpans: false,
+    ignoreIncomingRequestHook,
+  }),
+  new AwsInstrumentation({
+  sqsExtractContextPropagationFromPayload: true,
+}),
+    new DnsInstrumentation(),
+  ],
+});
 
   // Return the tracer for the service
-  return provider.getTracer(serviceName);
+  return tracerProvider.getTracer(serviceName);
+}
+
+/**
+* Gracefully stops the tracing by shutting down the tracer provider.
+*
+* This function ensures that all pending spans are exported and resources are
+* cleaned up properly. It is recommended to call this function during the
+* application's shutdown process.
+*
+* @returns {Promise<void>} - A promise that resolves when shutdown is complete.
+*/
+export async function stopTracing() {
+  if (tracerProvider) {
+    try {
+      await tracerProvider.shutdown();
+      console.info('Tracing has been successfully shut down.');
+    } catch (error) {
+      console.error('Error during tracing shutdown:', error);
+    }
+  } else {
+    console.warn('Tracer provider is not initialized.');
+  }
 }
