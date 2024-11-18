@@ -44,7 +44,7 @@
     "@opentelemetry/instrumentation-aws-sdk": "^0.46.0",
     "@opentelemetry/instrumentation-dns": "^0.40.0",
     "@opentelemetry/instrumentation-express": "^0.44.0",
-    "@opentelemetry/instrumentation-http": "^0.54.2",
+    "@opentelemetry/instrumentation-http": "^0.55.0",
     "@opentelemetry/instrumentation-pino": "^0.43.0",
     "@opentelemetry/propagator-b3": "^1.25.1",
     "@opentelemetry/resources": "^1.26.0",
