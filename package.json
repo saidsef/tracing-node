@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -12,7 +12,7 @@
   "private": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/saidsef/tracing-nodejs.git"
+    "url": "git+https://github.com/saidsef/tracing-node.git"
   },
   "keywords": [
     "instrumentation-aws-sdk",
