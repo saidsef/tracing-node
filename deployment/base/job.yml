@@ -34,4 +34,4 @@ spec:
       gitRepo:
         directory: "."
         repository: "https://github.com/saidsef/tracing-node.git"
-        revision: "fix-repo-url"
+        revision: "redis-connect"
