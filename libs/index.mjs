@@ -16,20 +16,22 @@
  * limitations under the License.
  */
 
-import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
-import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
-import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
-import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
+import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
+import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
+import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connnect';
+import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
+import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
+import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
+import {RedisInstrumentation} from '@opentelemetry/instrumentation-redis';
+import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {Resource} from '@opentelemetry/resources';
 import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
-import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
-import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
-import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -125,10 +127,12 @@ export function setupTracing(options = {}) {
     requireParentforIncomingSpans: false,
     ignoreIncomingRequestHook,
   }),
+  new ConnectInstrumentation(),
   new AwsInstrumentation({
   sqsExtractContextPropagationFromPayload: true,
 }),
     new DnsInstrumentation(),
+    new RedisInstrumentation(),
   ],
 });
 
