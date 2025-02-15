@@ -56,7 +56,7 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 | Name | Type | Description|
 |----- | ---- | ------------- |
 | hostname | string | container / pod hostname | 
-| service_name | string | service / application name |
+| serviceName | string | service / application name |
 | url | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
 
 ## Source
