@@ -20,7 +20,7 @@ import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
 import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
-import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connnect';
+import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
