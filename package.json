@@ -15,16 +15,8 @@
     "url": "git+https://github.com/saidsef/tracing-node.git"
   },
   "keywords": [
-    "instrumentation-aws-sdk",
-    "instrumentation-express",
-    "instrumentation-http",
-    "instrumentation-pino",
-    "instrumentation",
-    "opentelemetry",
-    "resources",
-    "sdk-trace-base",
-    "sdk-trace-node",
-    "semantic-conventions",
+    "opentracing",
+    "apm",
     "trace",
     "tracing"
   ],
