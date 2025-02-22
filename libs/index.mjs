@@ -68,7 +68,12 @@ export function setupTracing(options = {}) {
     concurrencyLimit = 10,
   } = options;
 
+  // Register the span processor with the tracer provider
+  const exporter = new OTLPTraceExporter(exportOptions);
+  const spanProcessor = new BatchSpanProcessor(exporter);
+
   tracerProvider = new NodeTracerProvider({
+    spanProcessors: [spanProcessor],
     resource: new Resource({
       [SemanticResourceAttributes.CONTAINER_NAME]: containerName || serviceName,
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
@@ -84,13 +89,13 @@ export function setupTracing(options = {}) {
   // Initialize the tracer provider with propagators
   tracerProvider.register({
     propagator: new CompositePropagator({
-  propagators: [
-    new W3CBaggagePropagator(),
-    new W3CTraceContextPropagator(),
-    new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER }),
-  ],
-}),
-});
+    propagators: [
+      new W3CBaggagePropagator(),
+      new W3CTraceContextPropagator(),
+      new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER }),
+      ],
+    }),
+  });
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
@@ -98,11 +103,6 @@ export function setupTracing(options = {}) {
     url: url,
     timeoutMillis: 1000,
   };
-
-  // Register the span processor with the tracer provider
-  const exporter = new OTLPTraceExporter(exportOptions);
-  const spanProcessor = new BatchSpanProcessor(exporter);
-  tracerProvider.activeSpanProcessor(spanProcessor);
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
@@ -121,8 +121,8 @@ export function setupTracing(options = {}) {
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new DnsInstrumentation(),
     new RedisInstrumentation(),
-  ],
-});
+    ],
+  });
 
   // Return the tracer for the service
   return tracerProvider.getTracer(serviceName);
