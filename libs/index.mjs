@@ -68,6 +68,13 @@ export function setupTracing(options = {}) {
     concurrencyLimit = 10,
   } = options;
 
+  // Configure exporter with the Collector endpoint - uses gRPC
+  const exportOptions = {
+    concurrencyLimit: concurrencyLimit,
+    url: url,
+    timeoutMillis: 1000,
+  };
+
   // Register the span processor with the tracer provider
   const exporter = new OTLPTraceExporter(exportOptions);
   const spanProcessor = new BatchSpanProcessor(exporter);
@@ -96,13 +103,6 @@ export function setupTracing(options = {}) {
       ],
     }),
   });
-
-  // Configure exporter with the Collector endpoint - uses gRPC
-  const exportOptions = {
-    concurrencyLimit: concurrencyLimit,
-    url: url,
-    timeoutMillis: 1000,
-  };
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
