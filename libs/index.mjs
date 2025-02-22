@@ -102,7 +102,7 @@ export function setupTracing(options = {}) {
   // Register the span processor with the tracer provider
   const exporter = new OTLPTraceExporter(exportOptions);
   const spanProcessor = new BatchSpanProcessor(exporter);
-  tracerProvider.addSpanProcessor(spanProcessor);
+  tracerProvider.spanProcessor(spanProcessor);
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
@@ -114,23 +114,11 @@ export function setupTracing(options = {}) {
   registerInstrumentations({
   tracerProvider: tracerProvider,
   instrumentations: [
-    new ExpressInstrumentation({
-      ignoreIncomingRequestHook,
-    }),
-    new PinoInstrumentation({
-      logHook: (span, record) => {
-    record['resource.service.name'] = tracerProvider.resource.attributes['service.name'];
-  },
-}),
-  new HttpInstrumentation({
-    requireParentforOutgoingSpans: false,
-    requireParentforIncomingSpans: false,
-    ignoreIncomingRequestHook,
-  }),
-  new ConnectInstrumentation(),
-  new AwsInstrumentation({
-  sqsExtractContextPropagationFromPayload: true,
-}),
+    new PinoInstrumentation({ logHook: (span, record) => { record['resource.service.name'] = tracerProvider.resource.attributes['service.name']; }, }),
+    new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
+    new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
+    new ConnectInstrumentation(),
+    new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new DnsInstrumentation(),
     new RedisInstrumentation(),
   ],
