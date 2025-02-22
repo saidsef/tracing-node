@@ -102,7 +102,7 @@ export function setupTracing(options = {}) {
   // Register the span processor with the tracer provider
   const exporter = new OTLPTraceExporter(exportOptions);
   const spanProcessor = new BatchSpanProcessor(exporter);
-  tracerProvider.spanProcessor(spanProcessor);
+  tracerProvider.activeSpanProcessor(spanProcessor);
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
