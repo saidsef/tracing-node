@@ -34,7 +34,7 @@
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.200.0",
     "@opentelemetry/instrumentation": "^0.200.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.49.0",
-    "@opentelemetry/instrumentation-connect": "^0.43.0",
+    "@opentelemetry/instrumentation-connect": "^0.44.0",
     "@opentelemetry/instrumentation-dns": "^0.43.0",
     "@opentelemetry/instrumentation-express": "^0.48.0",
     "@opentelemetry/instrumentation-http": "^0.200.0",
