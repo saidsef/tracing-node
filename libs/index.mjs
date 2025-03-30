@@ -30,7 +30,7 @@ import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {RedisInstrumentation} from '@opentelemetry/instrumentation-redis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {Resource} from '@opentelemetry/resources';
+import {defaultServiceName} from '@opentelemetry/resources';
 import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -81,7 +81,7 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: new Resource({
+    resource: new defaultServiceName({
       [SemanticResourceAttributes.CONTAINER_NAME]: containerName || serviceName,
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
       [SemanticResourceAttributes.HOSTNAME]: hostname,
