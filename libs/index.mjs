@@ -32,7 +32,6 @@ import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {defaultServiceName} from '@opentelemetry/resources';
-import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -59,12 +58,7 @@ let tracerProvider = null; // Declare provider in module scope for access in sto
 
 export function setupTracing(options = {}) {
   const {
-    containerName = process.env.CONTAINER_NAME,
-    deploymentEnvironment = process.env.NODE_ENV,
-    hostname = process.env.HOSTNAME,
     serviceName = process.env.SERVICE_NAME,
-    serviceNameSpace = process.env.NAME_SPACE || 'default',
-    serviceVersion = process.env.SERVICE_VERSION || '0.0.0',
     url = process.env.ENDPOINT,
     concurrencyLimit = 10,
   } = options;
