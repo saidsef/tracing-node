@@ -72,7 +72,7 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: await detectResources(),
+    resource: detectResources(),
   });
 
   // Initialize the tracer provider with propagators
