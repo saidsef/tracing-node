@@ -114,7 +114,7 @@ export function setupTracing(options = {}) {
   registerInstrumentations({
   tracerProvider: tracerProvider,
   instrumentations: [
-    new PinoInstrumentation({ logHook: (span, record) => { record['resource.service.name'] = tracerProvider.resource.attributes['service.name']; }, }),
+    new PinoInstrumentation(),
     new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new ConnectInstrumentation(),

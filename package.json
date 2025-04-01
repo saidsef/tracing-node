@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.2.4",
+  "version": "3.2.5",
   "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
