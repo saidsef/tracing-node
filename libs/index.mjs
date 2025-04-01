@@ -31,7 +31,7 @@ import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {defaultServiceName} from '@opentelemetry/resources';
+import {detectResources} from '@opentelemetry/resources';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -43,12 +43,8 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * tracing for HTTP, Express, AWS, Pino, and DNS.
 *
 * @param {Object} options - Configuration options for tracing.
-* @param {string} [options.containerName=process.env.CONTAINER_NAME] - The name of the container.
-* @param {string} [options.deploymentEnvironment=process.env.NODE_ENV] - The deployment environment.
 * @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
 * @param {string} [options.serviceName=process.env.SERVICE_NAME] - The name of the service.
-* @param {string} [options.serviceNameSpace=process.env.NAME_SPACE || 'default'] - The namespace of the service.
-* @param {string} [options.serviceVersion=process.env.SERVICE_VERSION || '0.0.0'] - The version of the service.
 * @param {string} [options.url=process.env.ENDPOINT] - The endpoint URL for the tracing collector.
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
 *
@@ -76,7 +72,7 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: new defaultServiceName(),
+    resource: detectResources(),
   });
 
   // Initialize the tracer provider with propagators
