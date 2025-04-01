@@ -116,6 +116,7 @@ export function setupTracing(options = {}) {
   instrumentations: [
     new PinoInstrumentation(),
     new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
+    new FastifyInstrumentation(),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
