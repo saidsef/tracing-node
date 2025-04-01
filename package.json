@@ -1,7 +1,7 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.3.3",
-  "description": "tracing NodeJS - This is a wrapper for OpenTelemetry instrumentation packages",
+  "version": "3.3.4",
+  "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
     "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.mjs",
