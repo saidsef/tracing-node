@@ -31,8 +31,9 @@ import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {Resource} from '@opentelemetry/resources';
+import {Resource, detectResourcesSync} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
+import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
@@ -55,6 +56,7 @@ let tracerProvider = null; // Declare provider in module scope for access in sto
 
 export function setupTracing(options = {}) {
   const {
+    hostname = process.env.CONTAINER_NAME || process.env.HOSTNAME,
     serviceName = process.env.SERVICE_NAME,
     url = process.env.ENDPOINT,
     concurrencyLimit = 10,
@@ -73,9 +75,12 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: new Resource({
-      [ATTR_SERVICE_NAME]: serviceName,
-    }),
+    resource: detectResourcesSync().merge(
+      new Resource({
+        [ATTR_SERVICE_NAME]: serviceName,
+        [ATTR_CONTAINER_NAME]: hostname,
+      }),
+    ),
   });
 
   // Initialize the tracer provider with propagators

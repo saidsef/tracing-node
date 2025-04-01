@@ -31,13 +31,9 @@ You can set required params via env variables or function:
 
 Env vars:
 ```
-CONTAINER_NAME
-NODE_ENV
-HOSTNAME
-SERVICE_NAME
-NAME_SPACE
-SERVICE_VERSION
+CONTAINER_NAME || HOSTNAME
 ENDPOINT
+SERVICE_NAME
 ```
 
 Function args
