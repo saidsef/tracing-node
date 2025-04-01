@@ -82,16 +82,7 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: new defaultServiceName({
-      [SemanticResourceAttributes.CONTAINER_NAME]: containerName || serviceName,
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
-      [SemanticResourceAttributes.HOSTNAME]: hostname,
-      [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-      [SemanticResourceAttributes.SERVICE_NAMESPACE]: serviceNameSpace,
-      [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion || '0.0.0',
-      [SemanticResourceAttributes.URL]: url,
-      instrumentationLibrarySemanticConvention: true,
-    }),
+    resource: new defaultServiceName(),
   });
 
   // Initialize the tracer provider with propagators
