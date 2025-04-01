@@ -28,7 +28,7 @@ import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
-import {RedisInstrumentation} from '@opentelemetry/instrumentation-redis';
+import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {defaultServiceName} from '@opentelemetry/resources';
 import {SemanticResourceAttributes} from '@opentelemetry/semantic-conventions';
@@ -121,7 +121,7 @@ export function setupTracing(options = {}) {
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new DnsInstrumentation(),
-    new RedisInstrumentation(),
+    new IORedisInstrumentation(),
     ],
   });
 
