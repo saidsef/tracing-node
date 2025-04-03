@@ -66,6 +66,7 @@ jobs:
         uses: actions/github-script@v7
         id: release
         if: ${{ env.PACKAGE }}
+        continue-on-error: true
         with:
           github-token: ${{ github.token }}
           result-encoding: string
@@ -78,12 +79,12 @@ jobs:
               const release = await github.rest.repos.createRelease({
                 owner, repo,
                 tag_name: tag,
-                # title: tag,
-                # name: tag,
+                title: tag,
+                name: tag,
                 draft: false,
                 make_latest: "true",
-                # target_commitish: sha,
-                generate_release_notes: "true"
+                target_commitish: sha
+                # generate_release_notes: "true"
               });
 
               release_id = release.data.id;
