@@ -82,7 +82,8 @@ jobs:
                 name: tag,
                 draft: false,
                 make_latest: "true",
-                target_commitish: sha
+                target_commitish: sha,
+                generate_release_notes: "true"
               });
 
               release_id = release.data.id;
