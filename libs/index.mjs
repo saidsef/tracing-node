@@ -31,7 +31,7 @@ import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {Resource, browserDetector, detectResourcesSync, envDetector} from '@opentelemetry/resources';
+import {Resource, detectResourcesSync, envDetector, hostDetector, processDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
@@ -75,11 +75,13 @@ export function setupTracing(options = {}) {
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: detectResourcesSync({detectors: [browserDetector, envDetector]}).merge(
-      new Resource({
-        [ATTR_SERVICE_NAME]: serviceName,
-        [ATTR_CONTAINER_NAME]: hostname,
-      }),
+    resource: new Resource({
+      [ATTR_SERVICE_NAME]: serviceName,
+      [ATTR_CONTAINER_NAME]: hostname,
+    }).merge(
+      detectResourcesSync({
+        detectors: [envDetector, processDetector, hostDetector]
+      })
     ),
   });
 
