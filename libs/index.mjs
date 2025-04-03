@@ -24,14 +24,14 @@ import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
-import {FastifyInstrumentation} from '@opentelemetry/instrumentation-fastify';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
-import {Resource, detectResourcesSync, envDetector, hostDetector, processDetector} from '@opentelemetry/resources';
+import { FsInstrumentation } from '@opentelemetry/instrumentation-fs';
+import {Resource, detectResourcesSync, envDetector, hostDetector, osDetector, processDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
@@ -80,7 +80,7 @@ export function setupTracing(options = {}) {
       [ATTR_CONTAINER_NAME]: hostname,
     }).merge(
       detectResourcesSync({
-        detectors: [envDetector, processDetector, hostDetector]
+        detectors: [envDetector, hostDetector, osDetector, processDetector]
       })
     ),
   });
@@ -108,12 +108,12 @@ export function setupTracing(options = {}) {
   instrumentations: [
     new PinoInstrumentation(),
     new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
-    new FastifyInstrumentation(),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
-    new DnsInstrumentation(),
     new IORedisInstrumentation(),
+    new FsInstrumentation(),
+    new DnsInstrumentation(),
     ],
   });
 
