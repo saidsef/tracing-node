@@ -54,6 +54,8 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 | hostname | string | container / pod hostname | 
 | serviceName | string | service / application name |
 | url | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
+| enableFsInstrumentation | boolean | enable FS instrumentation, default `false` |
+| enableDnsInstrumentation | boolean | enable DNS instrumentation, default `false` |
 
 ## Source
 
