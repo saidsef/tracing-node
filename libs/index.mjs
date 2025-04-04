@@ -49,6 +49,8 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * @param {string} [options.serviceName=process.env.SERVICE_NAME] - The name of the service.
 * @param {string} [options.url=process.env.ENDPOINT] - The endpoint URL for the tracing collector.
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
+* @param {boolean} [options.enableFsInstrumentation=false] - Enable file system instrumentation.
+* @param {boolean} [options.enableDnsInstrumentation=false] - Enable DNS instrumentation.
 *
 * @returns {Tracer} - The tracer for the service.
 */
@@ -60,6 +62,8 @@ export function setupTracing(options = {}) {
     serviceName = process.env.SERVICE_NAME,
     url = process.env.ENDPOINT,
     concurrencyLimit = 10,
+    enableFsInstrumentation = false,
+    enableDnsInstrumentation = false,
   } = options;
 
   // Configure exporter with the Collector endpoint - uses gRPC
@@ -103,18 +107,31 @@ export function setupTracing(options = {}) {
   };
 
   // Register instrumentations
-  registerInstrumentations({
-  tracerProvider: tracerProvider,
-  instrumentations: [
+  const instrumentations = [
     new PinoInstrumentation(),
     new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new IORedisInstrumentation(),
-    new FsInstrumentation(),
-    new DnsInstrumentation(),
-    ],
+  ];
+
+  if (enableFsInstrumentation) {
+    // Enable fs instrumentation if specified
+    // This instrumentation is useful for tracing file system operations.
+    instrumentations.push(new FsInstrumentation());
+  }
+
+  if (enableDnsInstrumentation) {
+    // Enable DNS instrumentation if specified
+    // This instrumentation is useful for tracing DNS operations.
+    instrumentations.push(new DnsInstrumentation());
+  }
+
+  // Register instrumentations
+  registerInstrumentations({
+  tracerProvider: tracerProvider,
+  instrumentations: instrumentations,
   });
 
   // Return the tracer for the service
