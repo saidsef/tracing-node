@@ -22,9 +22,9 @@ import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
-import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
@@ -108,12 +108,12 @@ export function setupTracing(options = {}) {
 
   // Register instrumentations
   const instrumentations = [
-    new PinoInstrumentation(),
-    new HttpInstrumentation({ requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
+    new HttpInstrumentation({ serverName: serviceName, requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
+    new PinoInstrumentation(),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
-    new IORedisInstrumentation(),
+    new IORedisInstrumentation({ requireParentSpan: false, }),
   ];
 
   if (enableFsInstrumentation) {
