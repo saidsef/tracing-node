@@ -10,7 +10,5 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    reviewers:
-      - "saidsef"
     pull-request-branch-name:
       separator: "-"
