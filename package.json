@@ -31,7 +31,7 @@
   "homepage": "https://github.com/saidsef/tracing-node#readme",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.200.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.201.1",
     "@opentelemetry/instrumentation": "^0.201.1",
     "@opentelemetry/instrumentation-aws-sdk": "^0.53.0",
     "@opentelemetry/instrumentation-connect": "^0.44.0",
