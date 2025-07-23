@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.5.2",
+  "version": "3.5.3",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -31,14 +31,14 @@
   "homepage": "https://github.com/saidsef/tracing-node#readme",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.202.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
     "@opentelemetry/instrumentation": "^0.203.0",
-    "@opentelemetry/instrumentation-aws-sdk": "^0.55.0",
-    "@opentelemetry/instrumentation-connect": "^0.46.0",
+    "@opentelemetry/instrumentation-aws-sdk": "^0.56.0",
+    "@opentelemetry/instrumentation-connect": "^0.47.0",
     "@opentelemetry/instrumentation-dns": "^0.47.0",
-    "@opentelemetry/instrumentation-express": "^0.51.0",
+    "@opentelemetry/instrumentation-express": "^0.52.0",
     "@opentelemetry/instrumentation-fs": "^0.23.0",
-    "@opentelemetry/instrumentation-http": "^0.202.0",
+    "@opentelemetry/instrumentation-http": "^0.203.0",
     "@opentelemetry/instrumentation-ioredis": "^0.51.0",
     "@opentelemetry/instrumentation-pino": "^0.50.0",
     "@opentelemetry/propagator-b3": "^2.0.0",
