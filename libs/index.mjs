@@ -109,12 +109,12 @@ export function setupTracing(options = {}) {
 
   // Register instrumentations
   const instrumentations = [
-    new HttpInstrumentation({ serverName: serviceName, requireParentforOutgoingSpans: false, requireParentforIncomingSpans: false, ignoreIncomingRequestHook, }),
+    new HttpInstrumentation({ serverName: serviceName, requireParentforOutgoingSpans: true, requireParentforIncomingSpans: true, ignoreIncomingRequestHook, }),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new PinoInstrumentation(),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
-    new IORedisInstrumentation({ requireParentSpan: false, }),
+    new IORedisInstrumentation({ requireParentSpan: true, }),
   ];
 
   if (enableFsInstrumentation) {
