@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.5.4",
+  "version": "3.6.0",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -41,7 +41,6 @@
     "@opentelemetry/instrumentation-http": "^0.203.0",
     "@opentelemetry/instrumentation-ioredis": "^0.51.0",
     "@opentelemetry/instrumentation-pino": "^0.50.0",
-    "@opentelemetry/propagator-b3": "^2.0.0",
     "@opentelemetry/resources": "^2.0.1",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",

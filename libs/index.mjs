@@ -17,7 +17,6 @@
  */
 
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
-import {B3Propagator, B3InjectEncoding} from '@opentelemetry/propagator-b3';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
@@ -68,7 +67,7 @@ export function setupTracing(options = {}) {
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
-    concurrencyLimit: concurrencyLimit,
+    concurrencyLimit: parseInt(concurrencyLimit, 10),
     url: url,
     timeoutMillis: 1000,
   };
@@ -94,24 +93,22 @@ export function setupTracing(options = {}) {
   tracerProvider.register({
     propagator: new CompositePropagator({
     propagators: [
-      new W3CBaggagePropagator(),
       new W3CTraceContextPropagator(),
-      new B3Propagator({ injectEncoding: B3InjectEncoding.MULTI_HEADER }),
+      new W3CBaggagePropagator(),
       ],
     }),
   });
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
-    const isStaticAsset = !!req.url.match(/^\/metrics|\/healthz.*$/);
-    return isStaticAsset;
+    return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
   };
 
   // Register instrumentations
   const instrumentations = [
-    new HttpInstrumentation({ serverName: serviceName, requireParentforOutgoingSpans: true, requireParentforIncomingSpans: true, ignoreIncomingRequestHook, }),
+    new HttpInstrumentation({serverName: serviceName, requireParentforOutgoingSpans: true, requireParentforIncomingSpans: true, ignoreIncomingRequestHook,}),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
-    new PinoInstrumentation(),
+    new PinoInstrumentation({logHook: (span, record) => {record['trace_id'] = span.spanContext().traceId;record['span_id'] = span.spanContext().spanId;},}),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new IORedisInstrumentation({ requireParentSpan: true, }),
@@ -131,8 +128,8 @@ export function setupTracing(options = {}) {
 
   // Register instrumentations
   registerInstrumentations({
-  tracerProvider: tracerProvider,
-  instrumentations: instrumentations,
+    tracerProvider: tracerProvider,
+    instrumentations: instrumentations,
   });
 
   // Return the tracer for the service
