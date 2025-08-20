@@ -17,6 +17,7 @@
  */
 
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
+import {AsyncHooksContextManager} from '@opentelemetry/context-async-hooks';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
@@ -91,6 +92,7 @@ export function setupTracing(options = {}) {
 
   // Initialize the tracer provider with propagators
   tracerProvider.register({
+    contextManager: new AsyncHooksContextManager().enable(),
     propagator: new CompositePropagator({
     propagators: [
       new W3CTraceContextPropagator(),
@@ -106,12 +108,12 @@ export function setupTracing(options = {}) {
 
   // Register instrumentations
   const instrumentations = [
-    new HttpInstrumentation({serverName: serviceName, requireParentforOutgoingSpans: true, requireParentforIncomingSpans: true, ignoreIncomingRequestHook,}),
+    new HttpInstrumentation({serverName: serviceName, ignoreIncomingRequestHook,}),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new PinoInstrumentation({logHook: (span, record) => {record['trace_id'] = span.spanContext().traceId;record['span_id'] = span.spanContext().spanId;},}),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
-    new IORedisInstrumentation({ requireParentSpan: true, }),
+    new IORedisInstrumentation(),
   ];
 
   if (enableFsInstrumentation) {
