@@ -7,17 +7,14 @@
 ![GitHub release(latest by date)](https://img.shields.io/github/v/release/saidsef/tracing-node)
 ![Commits](https://img.shields.io/github/commits-since/saidsef/tracing-node/latest.svg)
 
-
-
-
 Get telemetry for your app in less than 3 minutes!
 
-A wrapper around opentelemetry and set of instrumentation applications. This is to make instrumentation (more) idempotent.
+Effortlessly supercharge your applications with world-class distributed tracing! This OpenTelemetry wrapper delivers seamless, lightning-fast observability, empowering developers to monitor, debug, and optimise microservices with ease. Designed for modern cloud-native environments, it’s the smart choice for engineers who demand reliability, scalability, and actionable insights. Get started in minutes and unlock the full potential of your service architecture—no fuss, just results.  This is to make instrumentation (more) idempotent.
 
 ## Prerequisites
 - NodeJS
 - ...
-- Profit!
+- Profit?
 
 ## Instalation
 
@@ -30,18 +27,13 @@ npm install @saidsef/tracing-node --save
 You can set required params via env variables or function:
 
 Env vars:
-```
-CONTAINER_NAME || HOSTNAME
-ENDPOINT
-SERVICE_NAME
-```
+| Environment Variable   | Description                | Required |
+|-----------------------|----------------------------| --------- |
+| CONTAINER_NAME/HOSTNAME| Container or pod hostname  | No |
+| ENDPOINT              | Tracing collector endpoint | Yes |
+| SERVICE_NAME          | Service/application name   | Yes |
 
 Function args
-```
-const { setupTracing } = require('@saidsef/tracing-node');
-setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
-```
-
 ```
 import { setupTracing } from '@saidsef/tracing-node';
 setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
@@ -49,13 +41,13 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 
 ### Required Parameters are
 
-| Name | Type | Description|
-|----- | ---- | ------------- |
-| hostname | string | container / pod hostname | 
-| serviceName | string | service / application name |
-| url | string | tracing endpoint i.e. `<schema>://<host>:<port>` |
-| enableFsInstrumentation | boolean | enable FS instrumentation, default `false` |
-| enableDnsInstrumentation | boolean | enable DNS instrumentation, default `false` |
+| Name | Type | Description| Required | Default |
+|----- | ---- | ------------- | ----- | ---- |
+| hostname | string | container / pod hostname | No | `hostname` |
+| serviceName | string | service / application name | Yes | `n/a` |
+| url | string | tracing endpoint i.e. `<schema>://<host>:<port>` | Yes | `n/a` |
+| enableFsInstrumentation | boolean | enable FS instrumentation | No | `false` |
+| enableDnsInstrumentation | boolean | enable DNS instrumentation | No | `false`  |
 
 ## Source
 
