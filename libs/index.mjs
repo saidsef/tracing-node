@@ -31,7 +31,7 @@ import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
-import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector} from '@opentelemetry/resources';
+import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
@@ -84,7 +84,7 @@ export function setupTracing(options = {}) {
       [ATTR_CONTAINER_NAME]: hostname,
     }).merge(
       detectResources({
-        detectors: [envDetector, hostDetector, osDetector, processDetector],
+        detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
       })
     ),
     autoDetectResources: true,
