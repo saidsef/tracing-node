@@ -40,7 +40,7 @@
     "@opentelemetry/instrumentation-express": "^0.54.0",
     "@opentelemetry/instrumentation-fs": "^0.25.0",
     "@opentelemetry/instrumentation-http": "^0.204.0",
-    "@opentelemetry/instrumentation-ioredis": "^0.52.0",
+    "@opentelemetry/instrumentation-ioredis": "^0.53.0",
     "@opentelemetry/instrumentation-pino": "^0.52.0",
     "@opentelemetry/resources": "^2.0.1",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
