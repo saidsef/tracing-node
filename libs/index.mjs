@@ -24,6 +24,7 @@ import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
+import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
@@ -42,7 +43,7 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 *
 * This function configures a NodeTracerProvider with various instrumentations
 * and span processors to enable tracing for the application. It supports
-* tracing for HTTP, Express, AWS, Pino, and DNS.
+* tracing for HTTP, Express, AWS, Pino, DNS, Elasticsearch, and IORedis.
 *
 * @param {Object} options - Configuration options for tracing.
 * @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
@@ -106,14 +107,32 @@ export function setupTracing(options = {}) {
     return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
   };
 
+  // Hook to set peer service name for outgoing requests
+  const applyCustomAttributesOnSpan = (span, request) => {
+    const url = request?.url || request?.uri || '';
+    const hostname = request?.hostname || request?.host || '';
+    
+    // Detect Elasticsearch endpoints
+    if (hostname.includes('elasticsearch') || url.includes('elasticsearch') || 
+        hostname.includes(':9200') || url.includes(':9200')) {
+      span.setAttribute('peer.service', 'elasticsearch');
+      span.setAttribute('db.system', 'elasticsearch');
+    }
+  };
+
   // Register instrumentations
   const instrumentations = [
-    new HttpInstrumentation({serverName: serviceName, ignoreIncomingRequestHook,}),
+    new HttpInstrumentation({
+      serverName: serviceName, 
+      ignoreIncomingRequestHook,
+      applyCustomAttributesOnSpan,
+    }),
     new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
     new PinoInstrumentation({logHook: (span, record) => {record['trace_id'] = span.spanContext().traceId;record['span_id'] = span.spanContext().spanId;},}),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
     new IORedisInstrumentation(),
+    new ElasticsearchInstrumentation(),
   ];
 
   if (enableFsInstrumentation) {
