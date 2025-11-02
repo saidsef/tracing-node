@@ -44,6 +44,8 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * This function configures a NodeTracerProvider with various instrumentations
 * and span processors to enable tracing for the application. It supports
 * tracing for HTTP, Express, AWS, Pino, DNS, Elasticsearch, and IORedis.
+* The IORedis instrumentation includes peer.service attributes for proper
+* service map visualization in distributed tracing tools like Tempo.
 *
 * @param {Object} options - Configuration options for tracing.
 * @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
@@ -118,6 +120,13 @@ export function setupTracing(options = {}) {
       span.setAttribute('peer.service', 'elasticsearch');
       span.setAttribute('db.system', 'elasticsearch');
     }
+
+    // Detect Redis endpoints
+    if (hostname.includes('redis') || url.includes('redis') || 
+        hostname.includes(':6379') || url.includes(':6379')) {
+      span.setAttribute('peer.service', 'redis');
+      span.setAttribute('db.system', 'redis');
+    }
   };
 
   // Register instrumentations
@@ -131,7 +140,14 @@ export function setupTracing(options = {}) {
     new PinoInstrumentation({logHook: (span, record) => {record['trace_id'] = span.spanContext().traceId;record['span_id'] = span.spanContext().spanId;},}),
     new ConnectInstrumentation(),
     new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
-    new IORedisInstrumentation(),
+    new IORedisInstrumentation({
+      responseHook: (span) => {
+        span.setAttribute('peer.service', 'redis');
+      },
+      requestHook: (span) => {
+        span.setAttribute('peer.service', 'redis');
+      },
+    }),
     new ElasticsearchInstrumentation(),
   ];
 
