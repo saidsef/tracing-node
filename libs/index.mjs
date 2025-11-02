@@ -132,14 +132,113 @@ export function setupTracing(options = {}) {
   // Register instrumentations
   const instrumentations = [
     new HttpInstrumentation({
-      serverName: serviceName, 
+      serverName: serviceName,
       ignoreIncomingRequestHook,
       applyCustomAttributesOnSpan,
+      requestHook: (span, request) => {
+        // Enrich spans with additional HTTP request attributes
+        if (request.headers) {
+          const userAgent = request.headers['user-agent'];
+          const contentType = request.headers['content-type'];
+          const contentLength = request.headers['content-length'];
+
+          if (userAgent) span.setAttribute('http.user_agent', userAgent);
+          if (contentType) span.setAttribute('http.request.content_type', contentType);
+          if (contentLength) span.setAttribute('http.request.content_length', parseInt(contentLength, 10));
+        }
+      },
+      responseHook: (span, response) => {
+        // Add response attributes for better observability
+        if (response.headers) {
+          const contentType = response.headers['content-type'];
+          const contentLength = response.headers['content-length'];
+
+          if (contentType) span.setAttribute('http.response.content_type', contentType);
+          if (contentLength) span.setAttribute('http.response.content_length', parseInt(contentLength, 10));
+        }
+      },
+      headersToSpanAttributes: {
+        server: {
+          requestHeaders: ['x-request-id', 'x-correlation-id', 'x-trace-id'],
+          responseHeaders: ['x-request-id', 'x-correlation-id'],
+        },
+        client: {
+          requestHeaders: ['x-request-id', 'x-correlation-id', 'x-trace-id'],
+          responseHeaders: ['x-request-id', 'x-correlation-id'],
+        },
+      },
     }),
-    new ExpressInstrumentation({ ignoreIncomingRequestHook, }),
-    new PinoInstrumentation({logHook: (span, record) => {record['trace_id'] = span.spanContext().traceId;record['span_id'] = span.spanContext().spanId;},}),
-    new ConnectInstrumentation(),
-    new AwsInstrumentation({ sqsExtractContextPropagationFromPayload: true, }),
+    new ExpressInstrumentation({
+      ignoreIncomingRequestHook,
+      requestHook: (span, request) => {
+        // Add Express-specific attributes
+        if (request.route?.path) {
+          span.setAttribute('express.route', request.route.path);
+          span.updateName(`${request.method} ${request.route.path}`);
+        }
+        if (request.params && Object.keys(request.params).length > 0) {
+          span.setAttribute('express.params', JSON.stringify(request.params));
+        }
+        if (request.query && Object.keys(request.query).length > 0) {
+          span.setAttribute('express.query', JSON.stringify(request.query));
+        }
+        // Add user context if available
+        if (request.user?.id) {
+          span.setAttribute('user.id', request.user.id);
+        }
+      },
+    }),
+    new PinoInstrumentation({
+      logHook: (span, record) => {
+        // Inject trace context into log records
+        const spanContext = span.spanContext();
+        record['trace_id'] = spanContext.traceId;
+        record['span_id'] = spanContext.spanId;
+        record['trace_flags'] = `0${spanContext.traceFlags.toString(16)}`;
+
+        // Add service name for better log correlation
+        if (serviceName) {
+          record['service.name'] = serviceName;
+        }
+      },
+      logSeverity: {
+        error: 'ERROR',
+        warn: 'WARN',
+        info: 'INFO',
+        debug: 'DEBUG',
+        trace: 'TRACE',
+      },
+    }),
+    new ConnectInstrumentation({
+      ignoreIncomingRequestHook,
+      requestHook: (span, request) => {
+        // Add Connect middleware attributes
+        if (request.url) {
+          span.setAttribute('connect.url', request.url);
+        }
+        if (request.method) {
+          span.setAttribute('connect.method', request.method);
+        }
+      },
+    }),
+    new AwsInstrumentation({
+      suppressInternalInstrumentation: false,
+      sqsExtractContextPropagationFromPayload: true,
+      preRequestHook: (span, request) => {
+        // Add peer.service attribute for better service map visualization
+        const serviceName = request.serviceName || request.service?.serviceIdentifier;
+        if (serviceName) {
+          span.setAttribute('peer.service', serviceName.toLowerCase());
+          span.setAttribute('aws.service', serviceName.toLowerCase());
+        }
+      },
+      responseHook: (span, response) => {
+        // Add additional attributes from response if available
+        if (response?.requestId) {
+          span.setAttribute('aws.request_id', response.requestId);
+        }
+      },
+    }),
     new IORedisInstrumentation({
       responseHook: (span) => {
         span.setAttribute('peer.service', 'redis');
@@ -160,7 +259,57 @@ export function setupTracing(options = {}) {
   if (enableDnsInstrumentation) {
     // Enable DNS instrumentation if specified
     // This instrumentation is useful for tracing DNS operations.
-    instrumentations.push(new DnsInstrumentation());
+    instrumentations.push(new DnsInstrumentation({
+      ignoreHostnames: ['localhost', '127.0.0.1', '::1'],
+      requestHook: (span, request) => {
+        // Add DNS query details for better observability
+        if (request.hostname) {
+          span.setAttribute('dns.hostname', request.hostname);
+          span.updateName(`DNS ${request.hostname}`);
+        }
+        if (request.rrtype) {
+          span.setAttribute('dns.record_type', request.rrtype);
+        }
+        // Add additional context
+        span.setAttribute('peer.service', 'dns');
+        span.setAttribute('dns.query_count', 1);
+      },
+      responseHook: (span, response) => {
+        // Add DNS response details
+        if (Array.isArray(response)) {
+          span.setAttribute('dns.result_count', response.length);
+          // Log first few results for debugging (limit to avoid overwhelming spans)
+          const resultSample = response.slice(0, 3).map(r => 
+            typeof r === 'string' ? r : JSON.stringify(r)
+          );
+          if (resultSample.length > 0) {
+            span.setAttribute('dns.results', JSON.stringify(resultSample));
+          }
+        } else if (response) {
+          span.setAttribute('dns.result_count', 1);
+          span.setAttribute('dns.result', typeof response === 'string' ? response : JSON.stringify(response));
+        }
+      },
+      errorHook: (span, error) => {
+        // Enhanced error tracking for DNS failures
+        if (error) {
+          span.setAttribute('dns.error', true);
+          span.setAttribute('dns.error.code', error.code || 'UNKNOWN');
+          span.setAttribute('dns.error.message', error.message || 'DNS lookup failed');
+
+          // Categorize common DNS errors
+          if (error.code === 'ENOTFOUND') {
+            span.setAttribute('dns.error.type', 'NOT_FOUND');
+          } else if (error.code === 'ETIMEOUT') {
+            span.setAttribute('dns.error.type', 'TIMEOUT');
+          } else if (error.code === 'ECONNREFUSED') {
+            span.setAttribute('dns.error.type', 'CONNECTION_REFUSED');
+          } else {
+            span.setAttribute('dns.error.type', 'OTHER');
+          }
+        }
+      },
+    }));
   }
 
   // Register instrumentations
