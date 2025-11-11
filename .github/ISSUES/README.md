@@ -135,7 +135,18 @@ This directory contains detailed issue documentation created from a comprehensiv
 
 ## 📝 How to Create Issues in GitHub
 
-### Option 1: Manual Creation
+### Option 1: Use the Automated Script (Recommended - Fastest!)
+
+Run the provided script to create all 12 issues at once:
+
+```bash
+cd /home/runner/work/tracing-node/tracing-node
+./create-issues.sh
+```
+
+This will create all issues with proper labels and assignments in under a minute!
+
+### Option 2: Manual Creation
 1. Go to https://github.com/saidsef/tracing-node/issues/new
 2. Copy the content from each `.md` file
 3. Use the first line as the title
@@ -143,7 +154,7 @@ This directory contains detailed issue documentation created from a comprehensiv
 5. Add labels: `security`, `bug`, or `enhancement`
 6. Assign to @saidsef
 
-### Option 2: GitHub CLI (Faster)
+### Option 3: GitHub CLI (Individual Commands)
 ```bash
 cd .github/ISSUES
 
