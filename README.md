@@ -12,16 +12,17 @@ Get telemetry for your app in less than 3 minutes!
 Effortlessly supercharge your applications with world-class distributed tracing! This OpenTelemetry wrapper delivers seamless, lightning-fast observability, empowering developers to monitor, debug, and optimise microservices with ease. Designed for modern cloud-native environments, it's the smart choice for engineers who demand reliability, scalability, and actionable insights. Get started in minutes and unlock the full potential of your service architecture—no fuss, just results.  This is to make instrumentation (more) idempotent.
 
 ## Features
-
-- ✅ HTTP/HTTPS instrumentation with automatic service detection
-- ✅ Express.js framework support
-- ✅ Elasticsearch client instrumentation
-- ✅ IORedis client instrumentation  
-- ✅ AWS SDK instrumentation
-- ✅ Pino logger integration with trace/span IDs
-- ✅ Optional DNS and File System instrumentation
-- ✅ Automatic resource detection (host, OS, process, container)
-- ✅ W3C Trace Context propagation
+| Feature | Description |
+|---------|-------------|
+| HTTP/HTTPS instrumentation | Automatic service detection |
+| Express.js support | Framework instrumentation |
+| Elasticsearch client | Database instrumentation |
+| IORedis client | Cache instrumentation |
+| AWS SDK | Cloud service instrumentation |
+| Pino logger | Integration with trace/span IDs |
+| DNS/FS instrumentation | Optional monitoring |
+| Resource detection | Host, OS, process, container |
+| W3C Trace Context | Standard propagation |
 
 ## Prerequisites
 - NodeJS
