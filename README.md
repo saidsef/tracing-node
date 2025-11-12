@@ -26,6 +26,7 @@ Effortlessly supercharge your applications with world-class distributed tracing!
 
 ## Prerequisites
 - NodeJS
+- Observability
 - ...
 - Profit?
 
