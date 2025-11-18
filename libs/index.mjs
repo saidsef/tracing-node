@@ -119,7 +119,7 @@ export function setupTracing(options = {}) {
       try {
         const urlObj = new URL(request.url);
         hostname = urlObj.hostname;
-      } catch (e) {
+      } catch {
         // If URL parsing fails, try to extract from request options
         if (request?.options?.hostname) {
           hostname = request.options.hostname;
