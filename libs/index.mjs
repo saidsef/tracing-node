@@ -109,24 +109,61 @@ export function setupTracing(options = {}) {
     return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
   };
 
-  // Hook to set peer service name for outgoing requests
-  const applyCustomAttributesOnSpan = (span, request) => {
-    const url = request?.url || request?.uri || '';
-    const hostname = request?.hostname || request?.host || '';
+  // Helper function to extract hostname from various request formats
+  const extractHostname = (request) => {
+    // Try to get hostname from various possible locations
+    let hostname = request?.hostname || request?.host || '';
     
-    // Detect Elasticsearch endpoints
-    if (hostname.includes('elasticsearch') || url.includes('elasticsearch') || 
-        hostname.includes(':9200') || url.includes(':9200')) {
-      span.setAttribute('peer.service', 'elasticsearch');
-      span.setAttribute('db.system', 'elasticsearch');
+    // If not found, try to parse from URL
+    if (!hostname && request?.url) {
+      try {
+        const urlObj = new URL(request.url);
+        hostname = urlObj.hostname;
+      } catch (e) {
+        // If URL parsing fails, try to extract from request options
+        if (request?.options?.hostname) {
+          hostname = request.options.hostname;
+        } else if (request?.options?.host) {
+          hostname = request.options.host;
+        }
+      }
     }
 
-    // Detect Redis endpoints
-    if (hostname.includes('redis') || url.includes('redis') || 
-        hostname.includes(':6379') || url.includes(':6379')) {
-      span.setAttribute('peer.service', 'redis');
-      span.setAttribute('db.system', 'redis');
+    return hostname;
+  };
+
+  // Helper function to determine peer service name from hostname/URL
+  const getPeerServiceName = (hostname, url = '') => {
+    const lowerHostname = hostname.toLowerCase();
+    const lowerUrl = url.toLowerCase();
+
+    // Check for known service patterns
+    if (lowerHostname.includes('elasticsearch') || lowerUrl.includes('elasticsearch') ||
+        lowerHostname.includes(':9200') || lowerUrl.includes(':9200')) {
+      return 'elasticsearch';
     }
+
+    if (lowerHostname.includes('redis') || lowerUrl.includes('redis') ||
+        lowerHostname.includes(':6379') || lowerUrl.includes(':6379')) {
+      return 'redis';
+    }
+
+    // Extract service name from hostname patterns like:
+    // - service-name.namespace.svc.cluster.local
+    // - service-name.namespace.svc
+    // - api.service-name.com
+    if (lowerHostname.includes('.svc')) {
+      const parts = lowerHostname.split('.');
+      return parts[0]; // Return the service name part
+    }
+
+    // For external domains, use the hostname without 'www'
+    if (lowerHostname.startsWith('www.')) {
+      return lowerHostname.substring(4);
+    }
+
+    // Return the full hostname as the service name
+    return hostname || 'unknown';
   };
 
   // Register instrumentations
@@ -134,8 +171,39 @@ export function setupTracing(options = {}) {
     new HttpInstrumentation({
       serverName: serviceName,
       ignoreIncomingRequestHook,
-      applyCustomAttributesOnSpan,
+      requireParentforOutgoingSpans: false,
+      requireParentforIncomingSpans: false,
       requestHook: (span, request) => {
+        const spanKind = span.kind;
+        const isClientSpan = spanKind === 3; // SpanKind.CLIENT = 3
+
+        // For CLIENT spans (outgoing requests), add peer service attributes
+        if (isClientSpan) {
+          const hostname = extractHostname(request);
+          const url = request?.url || request?.uri || '';
+
+          if (hostname) {
+            const peerService = getPeerServiceName(hostname, url);
+
+            // Set attributes for service graph
+            span.setAttribute('peer.service', peerService);
+            span.setAttribute('net.peer.name', hostname);
+
+            // Add port if available
+            const port = request?.port || request?.options?.port;
+            if (port) {
+              span.setAttribute('net.peer.port', parseInt(port, 10));
+            }
+
+            // Add method for better span naming
+            const method = request?.method || 'GET';
+            span.setAttribute('http.method', method.toUpperCase());
+
+            // Update span name for clarity
+            span.updateName(`${method.toUpperCase()} ${peerService}`);
+          }
+        }
+
         // Enrich spans with additional HTTP request attributes
         if (request.headers) {
           const userAgent = request.headers['user-agent'];
@@ -240,11 +308,55 @@ export function setupTracing(options = {}) {
       },
     }),
     new IORedisInstrumentation({
-      responseHook: (span) => {
+      requireParentSpan: false,
+      responseHook: (span, cmdName, cmdArgs, response) => {
+        // Set peer.service for service graph visualization
         span.setAttribute('peer.service', 'redis');
+        span.setAttribute('db.system', 'redis');
+
+        // Add command details for better observability
+        if (cmdName) {
+          span.setAttribute('db.operation', cmdName.toUpperCase());
+        }
+
+        // Log response size if available
+        if (response !== undefined && response !== null) {
+          const responseType = typeof response;
+          span.setAttribute('db.response.type', responseType);
+
+          if (Array.isArray(response)) {
+            span.setAttribute('db.response.count', response.length);
+          }
+        }
       },
-      requestHook: (span) => {
+      requestHook: (span, cmdName, cmdArgs) => {
+        // Set peer.service for service graph visualization - CRITICAL for Tempo
         span.setAttribute('peer.service', 'redis');
+        span.setAttribute('db.system', 'redis');
+
+        // Add command details
+        if (cmdName) {
+          span.setAttribute('db.operation', cmdName.toUpperCase());
+          span.updateName(`redis.${cmdName.toUpperCase()}`);
+        }
+
+        // Add key information (first argument is usually the key)
+        if (cmdArgs && cmdArgs.length > 0) {
+          span.setAttribute('db.redis.key', String(cmdArgs[0]));
+
+          // For operations with multiple keys or complex args
+          if (cmdArgs.length > 1) {
+            span.setAttribute('db.redis.args_count', cmdArgs.length);
+          }
+        }
+      },
+      dbStatementSerializer: (cmdName, cmdArgs) => {
+        // Serialize command for better observability (limit arg length to avoid huge spans)
+        const args = cmdArgs.map(arg => {
+          const str = String(arg);
+          return str.length > 100 ? `${str.substring(0, 100)}...` : str;
+        });
+        return `${cmdName} ${args.join(' ')}`;
       },
     }),
     new ElasticsearchInstrumentation(),
