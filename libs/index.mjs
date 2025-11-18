@@ -309,30 +309,14 @@ export function setupTracing(options = {}) {
     }),
     new IORedisInstrumentation({
       requireParentSpan: false,
-      responseHook: (span, cmdName, cmdArgs, response) => {
-        // Set peer.service for service graph visualization
-        span.setAttribute('peer.service', 'redis');
-        span.setAttribute('db.system', 'redis');
-
-        // Add command details for better observability
-        if (cmdName) {
-          span.setAttribute('db.operation', cmdName.toUpperCase());
-        }
-
-        // Log response size if available
-        if (response !== undefined && response !== null) {
-          const responseType = typeof response;
-          span.setAttribute('db.response.type', responseType);
-
-          if (Array.isArray(response)) {
-            span.setAttribute('db.response.count', response.length);
-          }
-        }
-      },
       requestHook: (span, cmdName, cmdArgs) => {
         // Set peer.service for service graph visualization - CRITICAL for Tempo
+        // This must be set in requestHook to ensure it's available for service graph
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
+        
+        // Ensure span kind is CLIENT for proper service graph visualization
+        span.setAttribute('span.kind', 'CLIENT');
 
         // Add command details
         if (cmdName) {
@@ -349,6 +333,29 @@ export function setupTracing(options = {}) {
             span.setAttribute('db.redis.args_count', cmdArgs.length);
           }
         }
+        
+        // Add additional attributes for better service graph visualization
+        span.setAttribute('db.connection_string', 'redis');
+        span.setAttribute('net.peer.name', 'redis');
+      },
+      responseHook: (span, cmdName, cmdArgs, response) => {
+        // Ensure peer.service persists through response
+        span.setAttribute('peer.service', 'redis');
+
+        // Add command details for better observability
+        if (cmdName) {
+          span.setAttribute('db.operation', cmdName.toUpperCase());
+        }
+
+        // Log response size if available
+        if (response !== undefined && response !== null) {
+          const responseType = typeof response;
+          span.setAttribute('db.response.type', responseType);
+
+          if (Array.isArray(response)) {
+            span.setAttribute('db.response.count', response.length);
+          }
+        }
       },
       dbStatementSerializer: (cmdName, cmdArgs) => {
         // Serialize command for better observability (limit arg length to avoid huge spans)
@@ -359,7 +366,19 @@ export function setupTracing(options = {}) {
         return `${cmdName} ${args.join(' ')}`;
       },
     }),
-    new ElasticsearchInstrumentation(),
+    new ElasticsearchInstrumentation({
+      suppressInternalInstrumentation: true,
+      requestHook: (span, request) => {
+        // Set peer.service for service graph visualization - CRITICAL for Tempo
+        span.setAttribute('peer.service', 'elasticsearch');
+        span.setAttribute('db.system', 'elasticsearch');
+      },
+      responseHook: (span, response) => {
+        // Ensure peer.service persists through response
+        span.setAttribute('peer.service', 'elasticsearch');
+        span.setAttribute('db.system', 'elasticsearch');
+      },
+    }),
   ];
 
   if (enableFsInstrumentation) {
