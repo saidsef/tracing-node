@@ -185,9 +185,16 @@ export function setupTracing(options = {}) {
           if (hostname) {
             const peerService = getPeerServiceName(hostname, url);
 
-            // Set attributes for service graph
+            // Set attributes for service graph - CRITICAL for Tempo
             span.setAttribute('peer.service', peerService);
             span.setAttribute('net.peer.name', hostname);
+
+            // Add db.system for database clients (elasticsearch, redis, etc.)
+            if (peerService === 'elasticsearch') {
+              span.setAttribute('db.system', 'elasticsearch');
+            } else if (peerService === 'redis') {
+              span.setAttribute('db.system', 'redis');
+            }
 
             // Add port if available
             const port = request?.port || request?.options?.port;
@@ -309,22 +316,40 @@ export function setupTracing(options = {}) {
     }),
     new IORedisInstrumentation({
       requireParentSpan: false,
-      requestHook: (span) => {
+      requestHook: (span, cmdName, cmdArgs) => {
         // Set peer.service for service graph visualization - CRITICAL for Tempo
-        // This must be set in requestHook to ensure it's available for service graph
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
-        
-        // Ensure span kind is CLIENT for proper service graph visualization
-        span.setAttribute('span.kind', 'CLIENT');
-        
-        // Add additional attributes for better service graph visualization
-        span.setAttribute('db.connection_string', 'redis');
-        span.setAttribute('net.peer.name', 'redis');
+
+        // Add command details for better observability
+        if (cmdName) {
+          span.setAttribute('db.operation', cmdName.toUpperCase());
+          span.updateName(`redis.${cmdName.toUpperCase()}`);
+        }
+
+        // Add key information (first argument is usually the key)
+        if (cmdArgs && cmdArgs.length > 0) {
+          span.setAttribute('db.redis.key', String(cmdArgs[0]));
+
+          // For operations with multiple keys or complex args
+          if (cmdArgs.length > 1) {
+            span.setAttribute('db.redis.args_count', cmdArgs.length);
+          }
+        }
       },
-      responseHook: (span) => {
+      responseHook: (span, cmdName, cmdArgs, response) => {
         // Ensure peer.service persists through response
         span.setAttribute('peer.service', 'redis');
+
+        // Log response size if available
+        if (response !== undefined && response !== null) {
+          const responseType = typeof response;
+          span.setAttribute('db.response.type', responseType);
+
+          if (Array.isArray(response)) {
+            span.setAttribute('db.response.count', response.length);
+          }
+        }
       },
       dbStatementSerializer: (cmdName, cmdArgs) => {
         // Serialize command for better observability (limit arg length to avoid huge spans)
@@ -337,15 +362,42 @@ export function setupTracing(options = {}) {
     }),
     new ElasticsearchInstrumentation({
       suppressInternalInstrumentation: true,
-      requestHook: (span) => {
+      requestHook: (span, request) => {
         // Set peer.service for service graph visualization - CRITICAL for Tempo
+        // This ensures Elasticsearch spans are properly identified
         span.setAttribute('peer.service', 'elasticsearch');
         span.setAttribute('db.system', 'elasticsearch');
+
+        // Add operation details if available
+        if (request?.method) {
+          span.setAttribute('db.operation', request.method.toUpperCase());
+        }
       },
-      responseHook: (span) => {
+      responseHook: (span, response) => {
         // Ensure peer.service persists through response
         span.setAttribute('peer.service', 'elasticsearch');
         span.setAttribute('db.system', 'elasticsearch');
+        
+        // Add response details for better observability
+        if (response) {
+          // Add status code if available
+          if (response.statusCode) {
+            span.setAttribute('db.response.status_code', response.statusCode);
+          }
+          
+          // Add response body size if available
+          if (response.body) {
+            const bodySize = typeof response.body === 'string' 
+              ? response.body.length 
+              : JSON.stringify(response.body).length;
+            span.setAttribute('db.response.body_size', bodySize);
+          }
+          
+          // Add took time if available (Elasticsearch response timing)
+          if (response.body?.took) {
+            span.setAttribute('db.elasticsearch.took_ms', response.body.took);
+          }
+        }
       },
     }),
   ];
