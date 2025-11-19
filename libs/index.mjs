@@ -109,61 +109,24 @@ export function setupTracing(options = {}) {
     return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
   };
 
-  // Helper function to extract hostname from various request formats
-  const extractHostname = (request) => {
-    // Try to get hostname from various possible locations
-    let hostname = request?.hostname || request?.host || '';
+  // Hook to set peer service name for outgoing requests
+  const applyCustomAttributesOnSpan = (span, request) => {
+    const url = request?.url || request?.uri || '';
+    const hostname = request?.hostname || request?.host || '';
     
-    // If not found, try to parse from URL
-    if (!hostname && request?.url) {
-      try {
-        const urlObj = new URL(request.url);
-        hostname = urlObj.hostname;
-      } catch {
-        // If URL parsing fails, try to extract from request options
-        if (request?.options?.hostname) {
-          hostname = request.options.hostname;
-        } else if (request?.options?.host) {
-          hostname = request.options.host;
-        }
-      }
+    // Detect Elasticsearch endpoints
+    if (hostname.includes('elasticsearch') || url.includes('elasticsearch') || 
+        hostname.includes(':9200') || url.includes(':9200')) {
+      span.setAttribute('peer.service', 'elasticsearch');
+      span.setAttribute('db.system', 'elasticsearch');
     }
 
-    return hostname;
-  };
-
-  // Helper function to determine peer service name from hostname/URL
-  const getPeerServiceName = (hostname, url = '') => {
-    const lowerHostname = hostname.toLowerCase();
-    const lowerUrl = url.toLowerCase();
-
-    // Check for known service patterns
-    if (lowerHostname.includes('elasticsearch') || lowerUrl.includes('elasticsearch') ||
-        lowerHostname.includes(':9200') || lowerUrl.includes(':9200')) {
-      return 'elasticsearch';
+    // Detect Redis endpoints
+    if (hostname.includes('redis') || url.includes('redis') || 
+        hostname.includes(':6379') || url.includes(':6379')) {
+      span.setAttribute('peer.service', 'redis');
+      span.setAttribute('db.system', 'redis');
     }
-
-    if (lowerHostname.includes('redis') || lowerUrl.includes('redis') ||
-        lowerHostname.includes(':6379') || lowerUrl.includes(':6379')) {
-      return 'redis';
-    }
-
-    // Extract service name from hostname patterns like:
-    // - service-name.namespace.svc.cluster.local
-    // - service-name.namespace.svc
-    // - api.service-name.com
-    if (lowerHostname.includes('.svc')) {
-      const parts = lowerHostname.split('.');
-      return parts[0]; // Return the service name part
-    }
-
-    // For external domains, use the hostname without 'www'
-    if (lowerHostname.startsWith('www.')) {
-      return lowerHostname.substring(4);
-    }
-
-    // Return the full hostname as the service name
-    return hostname || 'unknown';
   };
 
   // Register instrumentations
@@ -171,46 +134,8 @@ export function setupTracing(options = {}) {
     new HttpInstrumentation({
       serverName: serviceName,
       ignoreIncomingRequestHook,
-      requireParentforOutgoingSpans: false,
-      requireParentforIncomingSpans: false,
+      applyCustomAttributesOnSpan,
       requestHook: (span, request) => {
-        const spanKind = span.kind;
-        const isClientSpan = spanKind === 3; // SpanKind.CLIENT = 3
-
-        // For CLIENT spans (outgoing requests), add peer service attributes
-        if (isClientSpan) {
-          const hostname = extractHostname(request);
-          const url = request?.url || request?.uri || '';
-
-          if (hostname) {
-            const peerService = getPeerServiceName(hostname, url);
-
-            // Set attributes for service graph - CRITICAL for Tempo
-            span.setAttribute('peer.service', peerService);
-            span.setAttribute('net.peer.name', hostname);
-
-            // Add db.system for database clients (elasticsearch, redis, etc.)
-            if (peerService === 'elasticsearch') {
-              span.setAttribute('db.system', 'elasticsearch');
-            } else if (peerService === 'redis') {
-              span.setAttribute('db.system', 'redis');
-            }
-
-            // Add port if available
-            const port = request?.port || request?.options?.port;
-            if (port) {
-              span.setAttribute('net.peer.port', parseInt(port, 10));
-            }
-
-            // Add method for better span naming
-            const method = request?.method || 'GET';
-            span.setAttribute('http.method', method.toUpperCase());
-
-            // Update span name for clarity
-            span.updateName(`${method.toUpperCase()} ${peerService}`);
-          }
-        }
-
         // Enrich spans with additional HTTP request attributes
         if (request.headers) {
           const userAgent = request.headers['user-agent'];
@@ -341,6 +266,11 @@ export function setupTracing(options = {}) {
         // Ensure peer.service persists through response
         span.setAttribute('peer.service', 'redis');
 
+        // Add command details for better observability
+        if (cmdName) {
+          span.setAttribute('db.operation', cmdName.toUpperCase());
+        }
+
         // Log response size if available
         if (response !== undefined && response !== null) {
           const responseType = typeof response;
@@ -360,46 +290,7 @@ export function setupTracing(options = {}) {
         return `${cmdName} ${args.join(' ')}`;
       },
     }),
-    new ElasticsearchInstrumentation({
-      suppressInternalInstrumentation: true,
-      requestHook: (span, request) => {
-        // Set peer.service for service graph visualization - CRITICAL for Tempo
-        // This ensures Elasticsearch spans are properly identified
-        span.setAttribute('peer.service', 'elasticsearch');
-        span.setAttribute('db.system', 'elasticsearch');
-
-        // Add operation details if available
-        if (request?.method) {
-          span.setAttribute('db.operation', request.method.toUpperCase());
-        }
-      },
-      responseHook: (span, response) => {
-        // Ensure peer.service persists through response
-        span.setAttribute('peer.service', 'elasticsearch');
-        span.setAttribute('db.system', 'elasticsearch');
-        
-        // Add response details for better observability
-        if (response) {
-          // Add status code if available
-          if (response.statusCode) {
-            span.setAttribute('db.response.status_code', response.statusCode);
-          }
-          
-          // Add response body size if available
-          if (response.body) {
-            const bodySize = typeof response.body === 'string' 
-              ? response.body.length 
-              : JSON.stringify(response.body).length;
-            span.setAttribute('db.response.body_size', bodySize);
-          }
-          
-          // Add took time if available (Elasticsearch response timing)
-          if (response.body?.took) {
-            span.setAttribute('db.elasticsearch.took_ms', response.body.took);
-          }
-        }
-      },
-    }),
+    new ElasticsearchInstrumentation(),
   ];
 
   if (enableFsInstrumentation) {
