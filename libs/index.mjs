@@ -245,6 +245,13 @@ export function setupTracing(options = {}) {
         // Set peer.service for service graph visualization - CRITICAL for Tempo
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
+        
+        // CRITICAL: Ensure span kind is CLIENT for service graph
+        span.setAttribute('span.kind', 'CLIENT');
+        
+        // Add network peer attributes (helps Tempo identify the service)
+        span.setAttribute('net.peer.name', 'redis');
+        span.setAttribute('db.connection_string', 'redis');
 
         // Add command details for better observability
         if (cmdName) {
@@ -265,6 +272,7 @@ export function setupTracing(options = {}) {
       responseHook: (span, cmdName, cmdArgs, response) => {
         // Ensure peer.service persists through response
         span.setAttribute('peer.service', 'redis');
+        span.setAttribute('db.system', 'redis');
 
         // Add command details for better observability
         if (cmdName) {
