@@ -103,14 +103,19 @@ jobs:
   npm:
     runs-on: ubuntu-latest
     if: ${{ contains(github.ref, 'main') }}
-    name: NPM Release
+    name: NPM Package Release
     needs: [tagging, release]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Git Checkout
         uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
       - name: NPM Release
-        env:
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm set "//registry.npmjs.org/:_authToken" ${{ secrets.NPM_TOKEN }}
+          npm test 
           npm publish
