@@ -6,7 +6,9 @@ on:
       - main
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  pull-requests: read
+  contents: read
 
 jobs:
   test:
@@ -14,7 +16,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     strategy:
       matrix:
-        node: [ 21, 22, 23, 24, 25 ]
+        node: [ 22, 23, 24, 25 ]
     name: Node ${{ matrix.node }} test
     steps:
       - name: Git Checkout
@@ -30,7 +32,7 @@ jobs:
       - name: NPM ESLint
         run: npm run lint
       - name: NPM Test
-        run: npm run test
+        run: npm test
 
   auto-approve:
     runs-on: ubuntu-latest
