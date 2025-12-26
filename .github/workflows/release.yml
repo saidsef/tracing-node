@@ -117,5 +117,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: NPM Release
         run: |
+          npm ci
           npm test 
           npm publish
