@@ -4,7 +4,7 @@
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
-    "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.mjs",
+    "test": "node --trace-warnings --test --report-uncaught-exception --heap-prof --cpu-prof --track-heap-objects --report-dir=test/ --diagnostic-dir=test/ --heap-prof-dir=test/ libs/index.test.mjs",
     "lint": "eslint .",
     "rebuild": "rm -rfv node_modules/ package-lock.json && npm install --prod --omit=dev"
   },

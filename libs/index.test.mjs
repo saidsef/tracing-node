@@ -1,62 +1,57 @@
-// tracing.test.mjs
-import { setupTracing } from './index.mjs';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-
-// Mocking external dependencies
-jest.mock('@opentelemetry/sdk-trace-node', () => {
-  const originalModule = jest.requireActual('@opentelemetry/sdk-trace-node');
-  return {
-    ...originalModule,
-    NodeTracerProvider: jest.fn().mockImplementation(() => ({
-      addSpanProcessor: jest.fn(),
-      register: jest.fn(),
-      getTracer: jest.fn().mockReturnValue({}),
-      resource: {
-        attributes: {},
-      },
-    })),
-  };
-});
-
-jest.mock('@opentelemetry/sdk-trace-base', () => ({
-  BatchSpanProcessor: jest.fn(),
-  SpanProcessor: jest.fn(),
-}));
-
-jest.mock('@opentelemetry/exporter-trace-otlp-grpc', () => ({
-  OTLPTraceExporter: jest.fn(),
-}));
+// index.test.mjs
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
 
 describe('setupTracing', () => {
+  // Clear environment before each test
   beforeEach(() => {
-    // Clear all instances and calls to constructor and all methods:
-    NodeTracerProvider.mockClear();
-    BatchSpanProcessor.mockClear();
-    OTLPTraceExporter.mockClear();
+    delete process.env.SERVICE_NAME;
+    delete process.env.ENDPOINT;
+    delete process.env.HOSTNAME;
+    delete process.env.CONTAINER_NAME;
   });
 
-  it('should create a tracer with default parameters', () => {
-    const tracer = setupTracing('test-service');
-    expect(NodeTracerProvider).toHaveBeenCalledTimes(1);
-    expect(BatchSpanProcessor).toHaveBeenCalledTimes(1);
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+  it('should throw error when serviceName is not provided', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    assert.throws(() => {
+      setupTracing({ url: 'http://localhost:4317' });
+    }, /serviceName is required/);
+  });
+
+  it('should throw error when url is not provided', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    assert.throws(() => {
+      setupTracing({ serviceName: 'test-service' });
+    }, /url is required/);
+  });
+
+  it('should create a tracer with required parameters', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const tracer = setupTracing({
       serviceName: 'test-service',
-      url: null,
+      url: 'http://localhost:4317',
     });
-    expect(tracer).toBeDefined();
+    assert.ok(tracer, 'tracer should be defined');
   });
 
-  it('should create a tracer with custom application name and endpoint', () => {
-    const tracer = setupTracing('test-service', 'custom-app', 'custom-endpoint');
-    expect(NodeTracerProvider).toHaveBeenCalledTimes(1);
-    expect(BatchSpanProcessor).toHaveBeenCalledTimes(1);
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+  it('should accept hostname parameter', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const tracer = setupTracing({
       serviceName: 'test-service',
-      url: 'custom-endpoint',
+      url: 'http://localhost:4317',
+      hostname: 'test-host',
     });
-    expect(tracer).toBeDefined();
+    assert.ok(tracer, 'tracer should be defined');
   });
 
+  it('should accept optional instrumentations', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const tracer = setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+      enableFsInstrumentation: true,
+      enableDnsInstrumentation: true,
+    });
+    assert.ok(tracer, 'tracer should be defined');
+  });
 });
