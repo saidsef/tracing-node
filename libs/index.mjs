@@ -60,6 +60,12 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 let tracerProvider = null; // Declare provider in module scope for access in stopTracing
 
 export function setupTracing(options = {}) {
+  // Prevent multiple initializations - return existing provider if already set up
+  if (tracerProvider) {
+    console.warn('Tracing is already initialized. Returning existing tracer.');
+    return tracerProvider.getTracer(options.serviceName || process.env.SERVICE_NAME);
+  }
+
   const {
     hostname = process.env.CONTAINER_NAME || process.env.HOSTNAME,
     serviceName = process.env.SERVICE_NAME,
@@ -68,6 +74,14 @@ export function setupTracing(options = {}) {
     enableFsInstrumentation = false,
     enableDnsInstrumentation = false,
   } = options;
+
+  // Validate required parameters
+  if (!serviceName) {
+    throw new Error('serviceName is required');
+  }
+  if (!url) {
+    throw new Error('url is required');
+  }
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
@@ -386,6 +400,7 @@ export async function stopTracing() {
   if (tracerProvider) {
     try {
       await tracerProvider.shutdown();
+      tracerProvider = null;
       console.info('Tracing has been successfully shut down.');
     } catch (error) {
       console.error('Error during tracing shutdown:', error);
