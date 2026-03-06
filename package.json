@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.13.6",
+  "version": "3.13.7",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -34,14 +34,14 @@
     "@opentelemetry/context-async-hooks": "^2.0.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.213.0",
     "@opentelemetry/instrumentation": "^0.213.0",
-    "@opentelemetry/instrumentation-aws-sdk": "^0.67.0",
-    "@opentelemetry/instrumentation-connect": "^0.55.0",
-    "@opentelemetry/instrumentation-dns": "^0.55.0",
-    "@opentelemetry/instrumentation-express": "^0.60.0",
-    "@opentelemetry/instrumentation-fs": "^0.31.0",
+    "@opentelemetry/instrumentation-aws-sdk": "^0.68.0",
+    "@opentelemetry/instrumentation-connect": "^0.56.0",
+    "@opentelemetry/instrumentation-dns": "^0.56.0",
+    "@opentelemetry/instrumentation-express": "^0.61.0",
+    "@opentelemetry/instrumentation-fs": "^0.32.0",
     "@opentelemetry/instrumentation-http": "^0.213.0",
-    "@opentelemetry/instrumentation-ioredis": "^0.60.0",
-    "@opentelemetry/instrumentation-pino": "^0.58.0",
+    "@opentelemetry/instrumentation-ioredis": "^0.61.0",
+    "@opentelemetry/instrumentation-pino": "^0.59.0",
     "@opentelemetry/resources": "^2.0.1",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
@@ -51,5 +51,8 @@
   "devDependencies": {
     "eslint": "^9.30.0",
     "jest": "^30.0.0"
+  },
+  "overrides": {
+    "protobufjs": "^7.5.3"
   }
 }
