@@ -1,14 +1,30 @@
 // index.test.mjs
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 describe('setupTracing', () => {
-  // Clear environment before each test
-  beforeEach(() => {
+  let stopTracing;
+
+  // Clear environment and reset tracing state before each test
+  beforeEach(async () => {
     delete process.env.SERVICE_NAME;
     delete process.env.ENDPOINT;
     delete process.env.HOSTNAME;
     delete process.env.CONTAINER_NAME;
+
+    // Import and store stopTracing for cleanup
+    const tracing = await import('./index.mjs');
+    stopTracing = tracing.stopTracing;
+
+    // Reset singleton for test isolation
+    tracing.__resetTracingForTesting();
+  });
+
+  // Clean up tracing after each test
+  afterEach(async () => {
+    if (stopTracing) {
+      await stopTracing();
+    }
   });
 
   it('should throw error when serviceName is not provided', async () => {
