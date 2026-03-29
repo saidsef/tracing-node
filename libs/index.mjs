@@ -85,14 +85,21 @@ export function setupTracing(options = {}) {
 
   // Configure exporter with the Collector endpoint - uses gRPC
   const exportOptions = {
-    concurrencyLimit: parseInt(concurrencyLimit, 10),
-    url: url,
-    timeoutMillis: 1000,
+    concurrencyLimit,
+    url,
+    timeoutMillis: 10000,
   };
 
   // Register the span processor with the tracer provider
   const exporter = new OTLPTraceExporter(exportOptions);
-  const spanProcessor = new BatchSpanProcessor(exporter);
+
+  // Configure BatchSpanProcessor for production workloads
+  const spanProcessor = new BatchSpanProcessor(exporter, {
+    maxQueueSize: 4096,
+    maxExportBatchSize: 1024,
+    scheduledDelayMillis: 2000,
+    exportTimeoutMillis: 10000,
+  });
 
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
@@ -151,35 +158,52 @@ export function setupTracing(options = {}) {
       applyCustomAttributesOnSpan,
       requestHook: (span, request) => {
         // Enrich spans with additional HTTP request attributes
-        if (request.headers) {
-          const userAgent = request.headers['user-agent'];
-          const contentType = request.headers['content-type'];
-          const contentLength = request.headers['content-length'];
+        if (!request.headers) return;
 
-          if (userAgent) span.setAttribute('http.user_agent', userAgent);
-          if (contentType) span.setAttribute('http.request.content_type', contentType);
-          if (contentLength) span.setAttribute('http.request.content_length', parseInt(contentLength, 10));
+        const headers = request.headers;
+
+        // Safe header extraction with case-insensitive fallback
+        const userAgent = headers['user-agent'] || headers['User-Agent'];
+        const contentType = headers['content-type'] || headers['Content-Type'];
+        const contentLength = headers['content-length'] || headers['Content-Length'];
+        const requestId = headers['x-request-id'] || headers['X-Request-ID'];
+        const correlationId = headers['x-correlation-id'] || headers['X-Correlation-ID'];
+
+        // Only set attributes if values exist
+        if (userAgent) span.setAttribute('http.user_agent', userAgent);
+        if (contentType) span.setAttribute('http.request.content_type', contentType);
+
+        // Safe integer parsing with validation
+        if (contentLength) {
+          const length = parseInt(contentLength, 10);
+          if (!Number.isNaN(length) && length >= 0) {
+            span.setAttribute('http.request.content_length', length);
+          }
         }
+
+        // Correlation headers for distributed tracing
+        if (requestId) span.setAttribute('http.request_id', requestId);
+        if (correlationId) span.setAttribute('http.correlation_id', correlationId);
       },
       responseHook: (span, response) => {
         // Add response attributes for better observability
-        if (response.headers) {
-          const contentType = response.headers['content-type'];
-          const contentLength = response.headers['content-length'];
+        if (!response.headers) return;
 
-          if (contentType) span.setAttribute('http.response.content_type', contentType);
-          if (contentLength) span.setAttribute('http.response.content_length', parseInt(contentLength, 10));
+        const headers = response.headers;
+        const contentType = headers['content-type'] || headers['Content-Type'];
+        const contentLength = headers['content-length'] || headers['Content-Length'];
+        const requestId = headers['x-request-id'] || headers['X-Request-ID'];
+
+        if (contentType) span.setAttribute('http.response.content_type', contentType);
+
+        if (contentLength) {
+          const length = parseInt(contentLength, 10);
+          if (!Number.isNaN(length) && length >= 0) {
+            span.setAttribute('http.response.content_length', length);
+          }
         }
-      },
-      headersToSpanAttributes: {
-        server: {
-          requestHeaders: ['x-request-id', 'x-correlation-id', 'x-trace-id'],
-          responseHeaders: ['x-request-id', 'x-correlation-id'],
-        },
-        client: {
-          requestHeaders: ['x-request-id', 'x-correlation-id', 'x-trace-id'],
-          responseHeaders: ['x-request-id', 'x-correlation-id'],
-        },
+
+        if (requestId) span.setAttribute('http.request_id', requestId);
       },
     }),
     new ExpressInstrumentation({
@@ -408,4 +432,13 @@ export async function stopTracing() {
   } else {
     console.warn('Tracer provider is not initialized.');
   }
+}
+
+/**
+ * @internal
+ * Resets the tracer provider for testing purposes.
+ * DO NOT use in production code.
+ */
+export function __resetTracingForTesting() {
+  tracerProvider = null;
 }
