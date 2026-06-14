@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: downstream
+  namespace: apps
+  labels: {app: downstream}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: downstream}
+  template:
+    metadata:
+      labels: {app: downstream}
+    spec:
+      containers:
+      - name: app
+        image: saidsef-repro:1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: SERVICE_NAME
+          value: downstream
+        - name: ROLE
+          value: leaf
+        - name: PORT
+          value: "8080"
+        - name: ENDPOINT
+          value: http://alloy.monitoring.svc:4317
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8080}
+          periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: downstream
+  namespace: apps
+spec:
+  selector: {app: downstream}
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: saidsef
+  namespace: apps
+  labels: {app: saidsef}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: saidsef}
+  template:
+    metadata:
+      labels: {app: saidsef}
+    spec:
+      containers:
+      - name: app
+        image: saidsef-repro:1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: SERVICE_NAME
+          value: saidsef
+        - name: ROLE
+          value: frontend
+        - name: PORT
+          value: "8080"
+        - name: ENDPOINT
+          value: http://alloy.monitoring.svc:4317
+        - name: DOWNSTREAM_URL
+          value: http://downstream.apps.svc:8080
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8080}
+          periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: saidsef
+  namespace: apps
+spec:
+  selector: {app: saidsef}
+  ports:
+  - port: 8080
+    targetPort: 8080

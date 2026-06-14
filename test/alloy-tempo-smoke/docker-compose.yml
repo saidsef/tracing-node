@@ -1,0 +1,29 @@
+services:
+  tempo:
+    image: docker.io/grafana/tempo:2.10.3
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    ports:
+      - "3200:3200"
+    networks: [otel]
+
+  alloy:
+    image: docker.io/grafana/alloy:v1.16.2
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "12345:12345"
+    depends_on:
+      - tempo
+    networks: [otel]
+
+networks:
+  otel: {}

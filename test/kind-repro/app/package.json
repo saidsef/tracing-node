@@ -1,0 +1,10 @@
+{
+  "name": "saidsef-repro",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "app.mjs",
+  "dependencies": {
+    "@saidsef/tracing-node": "file:./saidsef-tracing-node-4.0.0.tgz",
+    "express": "^4.21.2"
+  }
+}

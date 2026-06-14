@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import {createRequire} from 'node:module';
+import {createRequire, register as registerLoader} from 'node:module';
 import {AmqplibInstrumentation} from '@opentelemetry/instrumentation-amqplib';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
 import {AsyncLocalStorageContextManager} from '@opentelemetry/context-async-hooks';
@@ -42,7 +42,7 @@ import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {RuntimeNodeInstrumentation} from '@opentelemetry/instrumentation-runtime-node';
 import {UndiciInstrumentation} from '@opentelemetry/instrumentation-undici';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
-import {resourceFromAttributes, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
+import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
@@ -50,6 +50,24 @@ const requireFromConsumer = createRequire(import.meta.url);
 const targetInstalled = (name) => {
   try { requireFromConsumer.resolve(name); return true; } catch { return false; }
 };
+
+// Register the import-in-the-middle loader hook so ESM consumers' static
+// `import` statements get patched by instrumentations that target third-party
+// CJS modules (Express, IORedis, Pino, Postgres, MongoDB, KafkaJS, amqplib,
+// gRPC). Must happen here at module-load time of this library — i.e. before
+// the consumer's app code is linked — so it's effective when the bootstrap is
+// loaded via `node --import ./tracing.mjs app.js`. Without this, --import
+// alone is no better than --require for ESM auto-instrumentation: HTTP works
+// (it patches the built-in module object directly) but everything else silently
+// no-ops. Safe to call from a CJS consumer too: the loader is benign and
+// require-in-the-middle continues to handle the CJS require() path.
+if (typeof registerLoader === 'function') {
+  try {
+    registerLoader('@opentelemetry/instrumentation/hook.mjs', import.meta.url);
+  } catch (err) {
+    diag.debug?.('[@saidsef/tracing-node] could not register ESM loader hook:', err);
+  }
+}
 
 const DIAG_LEVELS = {
   NONE: DiagLogLevel.NONE,
@@ -60,6 +78,71 @@ const DIAG_LEVELS = {
   VERBOSE: DiagLogLevel.VERBOSE,
   ALL: DiagLogLevel.ALL,
 };
+
+const OTLP_HTTP_TRACES_PATH = '/v1/traces';
+const OTLP_HTTP_METRICS_PATH = '/v1/metrics';
+
+function normaliseOtlpHttpUrl(url, signalPath) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return {url, rewritten: false};
+  }
+  const path = parsed.pathname.replace(/\/$/, '');
+  if (path === signalPath || path.endsWith(signalPath)) {
+    return {url: parsed.href, rewritten: false};
+  }
+  parsed.pathname = (path === '' ? '' : path) + signalPath;
+  return {url: parsed.href, rewritten: true};
+}
+
+const CONFLICT_ENV_KEYS = [
+  'OTEL_SDK_DISABLED',
+  'OTEL_SERVICE_NAME',
+  'OTEL_RESOURCE_ATTRIBUTES',
+  'OTEL_EXPORTER_OTLP_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_PROTOCOL',
+  'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL',
+  'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
+  'OTEL_TRACES_SAMPLER',
+  'OTEL_TRACES_SAMPLER_ARG',
+];
+
+function detectDegradedStartupMode() {
+  const execArgv = Array.isArray(process.execArgv) ? process.execArgv : [];
+  const hasRequire = execArgv.some((a) => a === '--require' || a === '-r' || a.startsWith('--require=') || a.startsWith('-r='));
+  const hasImport = execArgv.some((a) => a === '--import' || a.startsWith('--import='));
+  if (hasRequire && !hasImport) {
+    return 'startup uses --require but not --import; ESM auto-instrumentation (e.g. Express, IORedis) cannot be hooked via --require. Prefer `node --import ./tracing.mjs app.js` (Node 20.6+). HTTP built-in instrumentation still works either way.';
+  }
+  return null;
+}
+
+function detectConflictingOtelEnv(resolved) {
+  const findings = [];
+  for (const key of CONFLICT_ENV_KEYS) {
+    const value = process.env[key];
+    if (value == null || value === '') continue;
+    if (key === 'OTEL_RESOURCE_ATTRIBUTES' && !/\bservice\.name\s*=/i.test(value)) continue;
+
+    let conflictsWith = null;
+    if (key === 'OTEL_SDK_DISABLED' && /^true$/i.test(value)) conflictsWith = 'setupTracing call (SDK would be disabled by env)';
+    else if (key === 'OTEL_SERVICE_NAME' && value !== resolved.serviceName) conflictsWith = `programmatic serviceName='${resolved.serviceName}'`;
+    else if (key === 'OTEL_RESOURCE_ATTRIBUTES') conflictsWith = `programmatic serviceName='${resolved.serviceName}'`;
+    else if ((key === 'OTEL_EXPORTER_OTLP_ENDPOINT' || key === 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') && value !== resolved.tracesUrl) conflictsWith = `programmatic url='${resolved.tracesUrl}'`;
+    else if (key === 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT' && value !== resolved.metricsUrl) conflictsWith = `programmatic metricsUrl='${resolved.metricsUrl}'`;
+    else if ((key === 'OTEL_EXPORTER_OTLP_PROTOCOL' || key === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' || key === 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL') && value !== resolved.exporterProtocol) conflictsWith = `programmatic exporterProtocol='${resolved.exporterProtocol}'`;
+    else if (key === 'OTEL_TRACES_SAMPLER' || key === 'OTEL_TRACES_SAMPLER_ARG') conflictsWith = `programmatic samplingRatio=${resolved.samplingRatio}`;
+
+    if (conflictsWith) {
+      findings.push({key, value, conflictsWith});
+    }
+  }
+  return findings;
+}
 
 /**
 * Sets up tracing for the application using OpenTelemetry's NodeSDK.
@@ -146,9 +229,19 @@ export function setupTracing(options = {}) {
     diag.setLogger(new DiagConsoleLogger(), envLevel ?? DiagLogLevel.INFO);
   }
 
+  let resolvedTracesUrl = url;
+  let tracesUrlRewritten = false;
+  if (exporterProtocol === 'http/protobuf') {
+    const norm = normaliseOtlpHttpUrl(url, OTLP_HTTP_TRACES_PATH);
+    resolvedTracesUrl = norm.url;
+    tracesUrlRewritten = norm.rewritten;
+    if (norm.rewritten) {
+      console.info(`[@saidsef/tracing-node] http/protobuf traces url '${url}' rewritten to '${resolvedTracesUrl}' (signal path appended)`);
+    }
+  }
   const exportOptions = {
     concurrencyLimit,
-    url,
+    url: resolvedTracesUrl,
     timeoutMillis: 10000,
   };
   const TraceExporterCtor = exporterProtocol === 'http/protobuf' ? OTLPHttpProtoTraceExporter : OTLPGrpcTraceExporter;
@@ -167,10 +260,22 @@ export function setupTracing(options = {}) {
   });
 
   let metricReaders = [];
+  let resolvedMetricsUrl = null;
   if (enableMetrics) {
+    const rawMetricsUrl = metricsUrl || url;
+    resolvedMetricsUrl = rawMetricsUrl;
+    let metricsUrlRewritten = false;
+    if (exporterProtocol === 'http/protobuf') {
+      const norm = normaliseOtlpHttpUrl(rawMetricsUrl, OTLP_HTTP_METRICS_PATH);
+      resolvedMetricsUrl = norm.url;
+      metricsUrlRewritten = norm.rewritten;
+      if (metricsUrlRewritten) {
+        console.info(`[@saidsef/tracing-node] http/protobuf metrics url '${rawMetricsUrl}' rewritten to '${resolvedMetricsUrl}' (signal path appended)`);
+      }
+    }
     const MetricExporterCtor = exporterProtocol === 'http/protobuf' ? OTLPHttpProtoMetricExporter : OTLPGrpcMetricExporter;
     const metricExporter = new MetricExporterCtor({
-      url: metricsUrl || url,
+      url: resolvedMetricsUrl,
       concurrencyLimit,
       timeoutMillis: 10000,
     });
@@ -487,11 +592,30 @@ export function setupTracing(options = {}) {
     }));
   }
 
-  sdk = new NodeSDK({
+  const detectedResource = detectResources({
+    detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector, containerDetector],
+  });
+  const mergedResource = detectedResource.merge(resource);
+
+  const envConflicts = detectConflictingOtelEnv({
     serviceName,
-    resource,
-    autoDetectResources: true,
-    resourceDetectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector, containerDetector],
+    tracesUrl: resolvedTracesUrl,
+    metricsUrl: resolvedMetricsUrl,
+    exporterProtocol,
+    samplingRatio,
+  });
+  for (const finding of envConflicts) {
+    console.warn(`[@saidsef/tracing-node] env ${finding.key}='${finding.value}' conflicts with ${finding.conflictsWith}; the SDK's NodeSDK resolution rules will decide which value is used.`);
+  }
+
+  const startupModeWarning = detectDegradedStartupMode();
+  if (startupModeWarning) {
+    console.warn(`[@saidsef/tracing-node] ${startupModeWarning}`);
+  }
+
+  sdk = new NodeSDK({
+    resource: mergedResource,
+    autoDetectResources: false,
     sampler: new ParentBasedSampler({
       root: new TraceIdRatioBasedSampler(samplingRatio),
     }),
@@ -513,6 +637,21 @@ export function setupTracing(options = {}) {
     process.once('SIGTERM', handler);
     process.once('SIGINT', handler);
   }
+
+  console.info(`[@saidsef/tracing-node] started ${JSON.stringify({
+    'service.name': serviceName,
+    'container.name': hostname,
+    'exporter.protocol': exporterProtocol,
+    'traces.url': resolvedTracesUrl,
+    'traces.url.rewritten': tracesUrlRewritten,
+    'metrics.enabled': enableMetrics,
+    'metrics.url': resolvedMetricsUrl,
+    'sampling.ratio': samplingRatio,
+    'install_signal_handlers': installSignalHandlers,
+    'instrumentations': instrumentations.map((i) => i.constructor.name),
+    'otel_env_overrides': envConflicts.map((f) => f.key),
+    'startup_mode_degraded': startupModeWarning != null,
+  })}`);
 
   return trace.getTracer(serviceName);
 }

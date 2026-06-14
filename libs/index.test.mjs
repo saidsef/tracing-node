@@ -12,6 +12,17 @@ describe('setupTracing', () => {
     delete process.env.ENDPOINT;
     delete process.env.HOSTNAME;
     delete process.env.CONTAINER_NAME;
+    delete process.env.OTEL_SDK_DISABLED;
+    delete process.env.OTEL_SERVICE_NAME;
+    delete process.env.OTEL_RESOURCE_ATTRIBUTES;
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
+    delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL;
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL;
+    delete process.env.OTEL_TRACES_SAMPLER;
+    delete process.env.OTEL_TRACES_SAMPLER_ARG;
 
     // Import and store stopTracing for cleanup
     const tracing = await import('./index.mjs');
@@ -249,6 +260,135 @@ describe('setupTracing', () => {
       );
     } finally {
       delete process.env.OTEL_METRICS_EXPORTER;
+    }
+  });
+
+  it('should append /v1/traces and /v1/metrics to a bare base URL when exporterProtocol is http/protobuf', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const infoLines = [];
+    const origInfo = console.info;
+    console.info = (msg) => infoLines.push(String(msg));
+    try {
+      setupTracing({
+        serviceName: 'test-service',
+        url: 'http://localhost:4318',
+        exporterProtocol: 'http/protobuf',
+      });
+    } finally {
+      console.info = origInfo;
+    }
+    const tracesRewrite = infoLines.find((l) => l.includes("traces url 'http://localhost:4318'") && l.includes('http://localhost:4318/v1/traces'));
+    const metricsRewrite = infoLines.find((l) => l.includes("metrics url 'http://localhost:4318'") && l.includes('http://localhost:4318/v1/metrics'));
+    assert.ok(tracesRewrite, 'expected an info line announcing the trace url rewrite');
+    assert.ok(metricsRewrite, 'expected an info line announcing the metrics url rewrite');
+    const banner = infoLines.find((l) => l.includes('[@saidsef/tracing-node] started'));
+    assert.ok(banner, 'expected the startup banner');
+    assert.ok(banner.includes('"traces.url":"http://localhost:4318/v1/traces"'), 'banner must show the rewritten traces url');
+    assert.ok(banner.includes('"metrics.url":"http://localhost:4318/v1/metrics"'), 'banner must show the rewritten metrics url');
+    assert.ok(banner.includes('"traces.url.rewritten":true'), 'banner must flag that the trace url was rewritten');
+  });
+
+  it('should leave http/protobuf URLs untouched when the signal path is already present', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const infoLines = [];
+    const origInfo = console.info;
+    console.info = (msg) => infoLines.push(String(msg));
+    try {
+      setupTracing({
+        serviceName: 'test-service',
+        url: 'http://localhost:4318/v1/traces',
+        metricsUrl: 'http://localhost:4318/v1/metrics',
+        exporterProtocol: 'http/protobuf',
+      });
+    } finally {
+      console.info = origInfo;
+    }
+    const anyRewrite = infoLines.find((l) => l.includes('rewritten to'));
+    assert.strictEqual(anyRewrite, undefined, 'no rewrite should happen when the path is already correct');
+    const banner = infoLines.find((l) => l.includes('[@saidsef/tracing-node] started'));
+    assert.ok(banner.includes('"traces.url.rewritten":false'));
+  });
+
+  it('should warn and prefer programmatic serviceName when OTEL_SERVICE_NAME is set in env', async () => {
+    process.env.OTEL_SERVICE_NAME = 'hijacked-by-env';
+    const warnings = [];
+    const origWarn = console.warn;
+    console.warn = (msg) => warnings.push(String(msg));
+    try {
+      const { setupTracing } = await import('./index.mjs');
+      setupTracing({
+        serviceName: 'programmatic-wins',
+        url: 'http://localhost:4317',
+      });
+      const conflictWarning = warnings.find((w) =>
+        w.includes("OTEL_SERVICE_NAME='hijacked-by-env'") &&
+        w.includes("programmatic serviceName='programmatic-wins'")
+      );
+      assert.ok(conflictWarning, `expected a console.warn about OTEL_SERVICE_NAME conflict, got: ${warnings.join('\n')}`);
+    } finally {
+      console.warn = origWarn;
+      delete process.env.OTEL_SERVICE_NAME;
+    }
+  });
+
+  it('should emit a single startup banner line containing the resolved service.name and trace url', async () => {
+    const { setupTracing } = await import('./index.mjs');
+    const infoLines = [];
+    const origInfo = console.info;
+    console.info = (msg) => infoLines.push(String(msg));
+    try {
+      setupTracing({
+        serviceName: 'banner-svc',
+        url: 'http://localhost:4317',
+      });
+    } finally {
+      console.info = origInfo;
+    }
+    const banners = infoLines.filter((l) => l.includes('[@saidsef/tracing-node] started'));
+    assert.strictEqual(banners.length, 1, 'exactly one startup banner per setupTracing call');
+    assert.ok(banners[0].includes('"service.name":"banner-svc"'));
+    assert.ok(banners[0].includes('"traces.url":"http://localhost:4317"'));
+    assert.ok(banners[0].includes('"otel_env_overrides":[]'));
+    assert.ok(banners[0].includes('"exporter.protocol":"grpc"'));
+  });
+
+  it('should warn when started via --require without --import (ESM consumers should use --import)', async () => {
+    const originalExecArgv = process.execArgv;
+    process.execArgv = [...originalExecArgv.filter((a) => !a.includes('--require') && !a.includes('--import')), '--require', './bootstrap.mjs'];
+    const warnings = [];
+    const origWarn = console.warn;
+    console.warn = (msg) => warnings.push(String(msg));
+    try {
+      const { setupTracing } = await import('./index.mjs');
+      setupTracing({
+        serviceName: 'test-service',
+        url: 'http://localhost:4317',
+      });
+      const warn = warnings.find((w) => w.includes('startup uses --require but not --import'));
+      assert.ok(warn, `expected a console.warn about degraded startup mode, got: ${warnings.join('\n')}`);
+    } finally {
+      console.warn = origWarn;
+      process.execArgv = originalExecArgv;
+    }
+  });
+
+  it('should NOT warn about startup mode when --import is used', async () => {
+    const originalExecArgv = process.execArgv;
+    process.execArgv = [...originalExecArgv.filter((a) => !a.includes('--require') && !a.includes('--import')), '--import', './bootstrap.mjs'];
+    const warnings = [];
+    const origWarn = console.warn;
+    console.warn = (msg) => warnings.push(String(msg));
+    try {
+      const { setupTracing } = await import('./index.mjs');
+      setupTracing({
+        serviceName: 'test-service',
+        url: 'http://localhost:4317',
+      });
+      const warn = warnings.find((w) => w.includes('startup uses --require'));
+      assert.strictEqual(warn, undefined, '--import should not trigger the startup-mode warning');
+    } finally {
+      console.warn = origWarn;
+      process.execArgv = originalExecArgv;
     }
   });
 
