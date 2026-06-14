@@ -16,36 +16,65 @@
  * limitations under the License.
  */
 
+import {createRequire} from 'node:module';
+import {AmqplibInstrumentation} from '@opentelemetry/instrumentation-amqplib';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
-import {AsyncHooksContextManager} from '@opentelemetry/context-async-hooks';
-import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
+import {AsyncLocalStorageContextManager} from '@opentelemetry/context-async-hooks';
+import {BatchSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler} from '@opentelemetry/sdk-trace-base';
 import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
-import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
-import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {containerDetector} from '@opentelemetry/resource-detector-container';
+import {diag, DiagConsoleLogger, DiagLogLevel, metrics, trace} from '@opentelemetry/api';
+import {GrpcInstrumentation} from '@opentelemetry/instrumentation-grpc';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
-import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
-import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import {KafkaJsInstrumentation} from '@opentelemetry/instrumentation-kafkajs';
+import {NodeSDK} from '@opentelemetry/sdk-node';
+import {MongoDBInstrumentation} from '@opentelemetry/instrumentation-mongodb';
+import {OTLPMetricExporter as OTLPGrpcMetricExporter} from '@opentelemetry/exporter-metrics-otlp-grpc';
+import {OTLPMetricExporter as OTLPHttpProtoMetricExporter} from '@opentelemetry/exporter-metrics-otlp-proto';
+import {OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import {OTLPTraceExporter as OTLPHttpProtoTraceExporter} from '@opentelemetry/exporter-trace-otlp-proto';
+import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
+import {PgInstrumentation} from '@opentelemetry/instrumentation-pg';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
-import {registerInstrumentations} from '@opentelemetry/instrumentation';
+import {RuntimeNodeInstrumentation} from '@opentelemetry/instrumentation-runtime-node';
+import {UndiciInstrumentation} from '@opentelemetry/instrumentation-undici';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
-import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
+import {resourceFromAttributes, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
+const requireFromConsumer = createRequire(import.meta.url);
+const targetInstalled = (name) => {
+  try { requireFromConsumer.resolve(name); return true; } catch { return false; }
+};
+
+const DIAG_LEVELS = {
+  NONE: DiagLogLevel.NONE,
+  ERROR: DiagLogLevel.ERROR,
+  WARN: DiagLogLevel.WARN,
+  INFO: DiagLogLevel.INFO,
+  DEBUG: DiagLogLevel.DEBUG,
+  VERBOSE: DiagLogLevel.VERBOSE,
+  ALL: DiagLogLevel.ALL,
+};
 
 /**
-* Sets up tracing for the application using OpenTelemetry.
+* Sets up tracing for the application using OpenTelemetry's NodeSDK.
 *
-* This function configures a NodeTracerProvider with various instrumentations
-* and span processors to enable tracing for the application. It supports
-* tracing for HTTP, Express, AWS, Pino, DNS, Elasticsearch, and IORedis.
-* The IORedis instrumentation includes peer.service attributes for proper
-* service map visualization in distributed tracing tools like Tempo.
+* Bootstraps `@opentelemetry/sdk-node` `NodeSDK` with traces (BatchSpanProcessor),
+* optional metrics (PeriodicExportingMetricReader + Node runtime metrics),
+* ParentBased TraceIdRatio sampling, AsyncLocalStorage context, W3C TraceContext
+* + Baggage propagation, and instrumentations for HTTP, undici (native fetch),
+* Express, AWS SDK, IORedis, Pino, plus auto-detected gRPC / Postgres / MongoDB
+* / KafkaJS / amqplib when their target libraries are installed in the consumer.
+*
+* The full set of standard `OTEL_*` environment variables is honoured via
+* NodeSDK (e.g. `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`,
+* `OTEL_PROPAGATORS`, `OTEL_SDK_DISABLED`). Programmatic options take
+* precedence over environment variables.
 *
 * @param {Object} options - Configuration options for tracing.
 * @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
@@ -54,16 +83,28 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
 * @param {boolean} [options.enableFsInstrumentation=false] - Enable file system instrumentation.
 * @param {boolean} [options.enableDnsInstrumentation=false] - Enable DNS instrumentation.
+* @param {('grpc'|'http/protobuf')} [options.exporterProtocol='grpc'] - OTLP exporter protocol.
+* @param {number} [options.samplingRatio=1.0] - Head-based sampling ratio for root spans (0.0-1.0). Inherits parent decision via ParentBasedSampler.
+* @param {boolean} [options.installSignalHandlers=false] - Register SIGTERM/SIGINT handlers that flush spans and exit.
+* @param {boolean} [options.enableDiagLogging=false] - Enable OpenTelemetry diagnostic console logger. Also enabled if OTEL_LOG_LEVEL env var is set.
+* @param {boolean} [options.enableMetrics=true] - Configure a MeterProvider so existing instrumentations emit RED-method metrics, plus Node runtime metrics.
+* @param {string} [options.metricsUrl] - OTLP metrics endpoint. Defaults to `url`.
+* @param {number} [options.metricExportIntervalMillis=60000] - Periodic metric reader export interval.
+* @param {boolean} [options.enableGrpcInstrumentation] - Force on/off; undefined = auto-detect by probing `@grpc/grpc-js`.
+* @param {boolean} [options.enablePgInstrumentation] - Force on/off; undefined = auto-detect by probing `pg`.
+* @param {boolean} [options.enableMongoDBInstrumentation] - Force on/off; undefined = auto-detect by probing `mongodb`.
+* @param {boolean} [options.enableKafkaJsInstrumentation] - Force on/off; undefined = auto-detect by probing `kafkajs`.
+* @param {boolean} [options.enableAmqplibInstrumentation] - Force on/off; undefined = auto-detect by probing `amqplib`.
 *
 * @returns {Tracer} - The tracer for the service.
 */
-let tracerProvider = null; // Declare provider in module scope for access in stopTracing
+let sdk = null;
+let signalHandlers = null;
 
 export function setupTracing(options = {}) {
-  // Prevent multiple initializations - return existing provider if already set up
-  if (tracerProvider) {
+  if (sdk) {
     console.warn('Tracing is already initialized. Returning existing tracer.');
-    return tracerProvider.getTracer(options.serviceName || process.env.SERVICE_NAME);
+    return trace.getTracer(options.serviceName || process.env.SERVICE_NAME);
   }
 
   const {
@@ -73,107 +114,114 @@ export function setupTracing(options = {}) {
     concurrencyLimit = 10,
     enableFsInstrumentation = false,
     enableDnsInstrumentation = false,
+    exporterProtocol = 'grpc',
+    samplingRatio = 1.0,
+    installSignalHandlers = false,
+    enableDiagLogging = false,
+    enableMetrics = true,
+    metricsUrl,
+    metricExportIntervalMillis = 60000,
+    enableGrpcInstrumentation,
+    enablePgInstrumentation,
+    enableMongoDBInstrumentation,
+    enableKafkaJsInstrumentation,
+    enableAmqplibInstrumentation,
   } = options;
 
-  // Validate required parameters
   if (!serviceName) {
     throw new Error('serviceName is required');
   }
   if (!url) {
     throw new Error('url is required');
   }
+  if (exporterProtocol !== 'grpc' && exporterProtocol !== 'http/protobuf') {
+    throw new Error(`exporterProtocol must be 'grpc' or 'http/protobuf', got: ${exporterProtocol}`);
+  }
+  if (typeof samplingRatio !== 'number' || samplingRatio < 0 || samplingRatio > 1) {
+    throw new Error(`samplingRatio must be a number between 0 and 1, got: ${samplingRatio}`);
+  }
 
-  // Configure exporter with the Collector endpoint - uses gRPC
+  const envLevel = process.env.OTEL_LOG_LEVEL && DIAG_LEVELS[process.env.OTEL_LOG_LEVEL.toUpperCase()];
+  if (enableDiagLogging || envLevel !== undefined) {
+    diag.setLogger(new DiagConsoleLogger(), envLevel ?? DiagLogLevel.INFO);
+  }
+
   const exportOptions = {
     concurrencyLimit,
     url,
     timeoutMillis: 10000,
   };
+  const TraceExporterCtor = exporterProtocol === 'http/protobuf' ? OTLPHttpProtoTraceExporter : OTLPGrpcTraceExporter;
+  const traceExporter = new TraceExporterCtor(exportOptions);
 
-  // Register the span processor with the tracer provider
-  const exporter = new OTLPTraceExporter(exportOptions);
-
-  // Configure BatchSpanProcessor for production workloads
-  const spanProcessor = new BatchSpanProcessor(exporter, {
+  const spanProcessor = new BatchSpanProcessor(traceExporter, {
     maxQueueSize: 4096,
     maxExportBatchSize: 1024,
     scheduledDelayMillis: 2000,
     exportTimeoutMillis: 10000,
   });
 
-  tracerProvider = new NodeTracerProvider({
-    spanProcessors: [spanProcessor],
-    resource: new resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: serviceName,
-      [ATTR_CONTAINER_NAME]: hostname,
-    }).merge(
-      detectResources({
-        detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
-      })
-    ),
-    autoDetectResources: true,
+  const resource = resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: serviceName,
+    [ATTR_CONTAINER_NAME]: hostname,
   });
 
-  // Initialize the tracer provider with propagators
-  tracerProvider.register({
-    contextManager: new AsyncHooksContextManager().enable(),
-    propagator: new CompositePropagator({
-    propagators: [
-      new W3CTraceContextPropagator(),
-      new W3CBaggagePropagator(),
-      ],
-    }),
-  });
+  let metricReaders = [];
+  if (enableMetrics) {
+    const MetricExporterCtor = exporterProtocol === 'http/protobuf' ? OTLPHttpProtoMetricExporter : OTLPGrpcMetricExporter;
+    const metricExporter = new MetricExporterCtor({
+      url: metricsUrl || url,
+      concurrencyLimit,
+      timeoutMillis: 10000,
+    });
+    metricReaders = [
+      new PeriodicExportingMetricReader({
+        exporter: metricExporter,
+        exportIntervalMillis: metricExportIntervalMillis,
+      }),
+    ];
+  }
 
-  // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
     return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
   };
 
-  // Hook to set peer service name for outgoing requests
   const applyCustomAttributesOnSpan = (span, request) => {
-    const url = request?.url || request?.uri || '';
-    const hostname = request?.hostname || request?.host || '';
-    
-    // Detect Elasticsearch endpoints
-    if (hostname.includes('elasticsearch') || url.includes('elasticsearch') || 
-        hostname.includes(':9200') || url.includes(':9200')) {
+    const reqUrl = request?.url || request?.uri || '';
+    const reqHostname = request?.hostname || request?.host || '';
+
+    if (reqHostname.includes('elasticsearch') || reqUrl.includes('elasticsearch') ||
+        reqHostname.includes(':9200') || reqUrl.includes(':9200')) {
       span.setAttribute('peer.service', 'elasticsearch');
       span.setAttribute('db.system', 'elasticsearch');
     }
 
-    // Detect Redis endpoints
-    if (hostname.includes('redis') || url.includes('redis') || 
-        hostname.includes(':6379') || url.includes(':6379')) {
+    if (reqHostname.includes('redis') || reqUrl.includes('redis') ||
+        reqHostname.includes(':6379') || reqUrl.includes(':6379')) {
       span.setAttribute('peer.service', 'redis');
       span.setAttribute('db.system', 'redis');
     }
   };
 
-  // Register instrumentations
   const instrumentations = [
     new HttpInstrumentation({
       serverName: serviceName,
       ignoreIncomingRequestHook,
       applyCustomAttributesOnSpan,
       requestHook: (span, request) => {
-        // Enrich spans with additional HTTP request attributes
         if (!request.headers) return;
 
         const headers = request.headers;
 
-        // Safe header extraction with case-insensitive fallback
         const userAgent = headers['user-agent'] || headers['User-Agent'];
         const contentType = headers['content-type'] || headers['Content-Type'];
         const contentLength = headers['content-length'] || headers['Content-Length'];
         const requestId = headers['x-request-id'] || headers['X-Request-ID'];
         const correlationId = headers['x-correlation-id'] || headers['X-Correlation-ID'];
 
-        // Only set attributes if values exist
         if (userAgent) span.setAttribute('http.user_agent', userAgent);
         if (contentType) span.setAttribute('http.request.content_type', contentType);
 
-        // Safe integer parsing with validation
         if (contentLength) {
           const length = parseInt(contentLength, 10);
           if (!Number.isNaN(length) && length >= 0) {
@@ -181,12 +229,10 @@ export function setupTracing(options = {}) {
           }
         }
 
-        // Correlation headers for distributed tracing
         if (requestId) span.setAttribute('http.request_id', requestId);
         if (correlationId) span.setAttribute('http.correlation_id', correlationId);
       },
       responseHook: (span, response) => {
-        // Add response attributes for better observability
         if (!response.headers) return;
 
         const headers = response.headers;
@@ -206,10 +252,31 @@ export function setupTracing(options = {}) {
         if (requestId) span.setAttribute('http.request_id', requestId);
       },
     }),
+    new UndiciInstrumentation({
+      ignoreRequestHook: (request) => {
+        const path = request?.path || '';
+        return path.startsWith('/metrics') || path.startsWith('/healthz');
+      },
+      requestHook: (span, request) => {
+        const headers = request?.headers;
+        if (!headers) return;
+        const headerMap = Array.isArray(headers)
+          ? Object.fromEntries(
+              headers
+                .map((line) => typeof line === 'string' ? line.split(':') : null)
+                .filter((kv) => kv && kv.length >= 2)
+                .map(([k, ...rest]) => [k.trim().toLowerCase(), rest.join(':').trim()])
+            )
+          : headers;
+        const requestId = headerMap['x-request-id'];
+        const correlationId = headerMap['x-correlation-id'];
+        if (requestId) span.setAttribute('http.request_id', requestId);
+        if (correlationId) span.setAttribute('http.correlation_id', correlationId);
+      },
+    }),
     new ExpressInstrumentation({
       ignoreIncomingRequestHook,
       requestHook: (span, request) => {
-        // Add Express-specific attributes
         if (request.route?.path) {
           span.setAttribute('express.route', request.route.path);
           span.updateName(`${request.method} ${request.route.path}`);
@@ -220,7 +287,6 @@ export function setupTracing(options = {}) {
         if (request.query && Object.keys(request.query).length > 0) {
           span.setAttribute('express.query', JSON.stringify(request.query));
         }
-        // Add user context if available
         if (request.user?.id) {
           span.setAttribute('user.id', request.user.id);
         }
@@ -228,13 +294,11 @@ export function setupTracing(options = {}) {
     }),
     new PinoInstrumentation({
       logHook: (span, record) => {
-        // Inject trace context into log records
         const spanContext = span.spanContext();
         record['trace_id'] = spanContext.traceId;
         record['span_id'] = spanContext.spanId;
         record['trace_flags'] = `0${spanContext.traceFlags.toString(16)}`;
 
-        // Add service name for better log correlation
         if (serviceName) {
           record['service.name'] = serviceName;
         }
@@ -247,31 +311,17 @@ export function setupTracing(options = {}) {
         trace: 'TRACE',
       },
     }),
-    new ConnectInstrumentation({
-      ignoreIncomingRequestHook,
-      requestHook: (span, request) => {
-        // Add Connect middleware attributes
-        if (request.url) {
-          span.setAttribute('connect.url', request.url);
-        }
-        if (request.method) {
-          span.setAttribute('connect.method', request.method);
-        }
-      },
-    }),
     new AwsInstrumentation({
       suppressInternalInstrumentation: false,
       sqsExtractContextPropagationFromPayload: true,
       preRequestHook: (span, request) => {
-        // Add peer.service attribute for better service map visualization
-        const serviceName = request.serviceName || request.service?.serviceIdentifier;
-        if (serviceName) {
-          span.setAttribute('peer.service', serviceName.toLowerCase());
-          span.setAttribute('aws.service', serviceName.toLowerCase());
+        const awsServiceName = request.serviceName || request.service?.serviceIdentifier;
+        if (awsServiceName) {
+          span.setAttribute('peer.service', awsServiceName.toLowerCase());
+          span.setAttribute('aws.service', awsServiceName.toLowerCase());
         }
       },
       responseHook: (span, response) => {
-        // Add additional attributes from response if available
         if (response?.requestId) {
           span.setAttribute('aws.request_id', response.requestId);
         }
@@ -280,44 +330,35 @@ export function setupTracing(options = {}) {
     new IORedisInstrumentation({
       requireParentSpan: false,
       requestHook: (span, cmdName, cmdArgs) => {
-        // Set peer.service for service graph visualization - CRITICAL for Tempo
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
-        
-        // CRITICAL: Ensure span kind is CLIENT for service graph
+
         span.setAttribute('span.kind', 'CLIENT');
-        
-        // Add network peer attributes (helps Tempo identify the service)
+
         span.setAttribute('net.peer.name', 'redis');
         span.setAttribute('db.connection_string', 'redis');
 
-        // Add command details for better observability
         if (cmdName) {
           span.setAttribute('db.operation', cmdName.toUpperCase());
           span.updateName(`redis.${cmdName.toUpperCase()}`);
         }
 
-        // Add key information (first argument is usually the key)
         if (cmdArgs && cmdArgs.length > 0) {
           span.setAttribute('db.redis.key', String(cmdArgs[0]));
 
-          // For operations with multiple keys or complex args
           if (cmdArgs.length > 1) {
             span.setAttribute('db.redis.args_count', cmdArgs.length);
           }
         }
       },
       responseHook: (span, cmdName, cmdArgs, response) => {
-        // Ensure peer.service persists through response
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
 
-        // Add command details for better observability
         if (cmdName) {
           span.setAttribute('db.operation', cmdName.toUpperCase());
         }
 
-        // Log response size if available
         if (response !== undefined && response !== null) {
           const responseType = typeof response;
           span.setAttribute('db.response.type', responseType);
@@ -328,7 +369,6 @@ export function setupTracing(options = {}) {
         }
       },
       dbStatementSerializer: (cmdName, cmdArgs) => {
-        // Serialize command for better observability (limit arg length to avoid huge spans)
         const args = cmdArgs.map(arg => {
           const str = String(arg);
           return str.length > 100 ? `${str.substring(0, 100)}...` : str;
@@ -336,22 +376,73 @@ export function setupTracing(options = {}) {
         return `${cmdName} ${args.join(' ')}`;
       },
     }),
-    new ElasticsearchInstrumentation(),
   ];
 
+  const shouldEnable = (override, target) => {
+    if (override === true) return true;
+    if (override === false) return false;
+    return targetInstalled(target);
+  };
+
+  if (enableMetrics) {
+    instrumentations.push(new RuntimeNodeInstrumentation());
+  }
+
+  if (shouldEnable(enableGrpcInstrumentation, '@grpc/grpc-js')) {
+    instrumentations.push(new GrpcInstrumentation());
+  }
+  if (shouldEnable(enablePgInstrumentation, 'pg')) {
+    instrumentations.push(new PgInstrumentation({
+      requireParentSpan: false,
+      enhancedDatabaseReporting: true,
+      requestHook: (span) => {
+        span.setAttribute('peer.service', 'postgres');
+        span.setAttribute('db.system', 'postgresql');
+      },
+    }));
+  }
+  if (shouldEnable(enableMongoDBInstrumentation, 'mongodb')) {
+    instrumentations.push(new MongoDBInstrumentation({
+      enhancedDatabaseReporting: false,
+      responseHook: (span) => {
+        span.setAttribute('peer.service', 'mongodb');
+        span.setAttribute('db.system', 'mongodb');
+      },
+    }));
+  }
+  if (shouldEnable(enableKafkaJsInstrumentation, 'kafkajs')) {
+    instrumentations.push(new KafkaJsInstrumentation({
+      producerHook: (span) => {
+        span.setAttribute('peer.service', 'kafka');
+        span.setAttribute('messaging.system', 'kafka');
+      },
+      consumerHook: (span) => {
+        span.setAttribute('peer.service', 'kafka');
+        span.setAttribute('messaging.system', 'kafka');
+      },
+    }));
+  }
+  if (shouldEnable(enableAmqplibInstrumentation, 'amqplib')) {
+    instrumentations.push(new AmqplibInstrumentation({
+      publishHook: (span) => {
+        span.setAttribute('peer.service', 'rabbitmq');
+        span.setAttribute('messaging.system', 'rabbitmq');
+      },
+      consumeHook: (span) => {
+        span.setAttribute('peer.service', 'rabbitmq');
+        span.setAttribute('messaging.system', 'rabbitmq');
+      },
+    }));
+  }
+
   if (enableFsInstrumentation) {
-    // Enable fs instrumentation if specified
-    // This instrumentation is useful for tracing file system operations.
     instrumentations.push(new FsInstrumentation());
   }
 
   if (enableDnsInstrumentation) {
-    // Enable DNS instrumentation if specified
-    // This instrumentation is useful for tracing DNS operations.
     instrumentations.push(new DnsInstrumentation({
       ignoreHostnames: ['localhost', '127.0.0.1', '::1'],
       requestHook: (span, request) => {
-        // Add DNS query details for better observability
         if (request.hostname) {
           span.setAttribute('dns.hostname', request.hostname);
           span.updateName(`DNS ${request.hostname}`);
@@ -359,16 +450,13 @@ export function setupTracing(options = {}) {
         if (request.rrtype) {
           span.setAttribute('dns.record_type', request.rrtype);
         }
-        // Add additional context
         span.setAttribute('peer.service', 'dns');
         span.setAttribute('dns.query_count', 1);
       },
       responseHook: (span, response) => {
-        // Add DNS response details
         if (Array.isArray(response)) {
           span.setAttribute('dns.result_count', response.length);
-          // Log first few results for debugging (limit to avoid overwhelming spans)
-          const resultSample = response.slice(0, 3).map(r => 
+          const resultSample = response.slice(0, 3).map(r =>
             typeof r === 'string' ? r : JSON.stringify(r)
           );
           if (resultSample.length > 0) {
@@ -380,13 +468,11 @@ export function setupTracing(options = {}) {
         }
       },
       errorHook: (span, error) => {
-        // Enhanced error tracking for DNS failures
         if (error) {
           span.setAttribute('dns.error', true);
           span.setAttribute('dns.error.code', error.code || 'UNKNOWN');
           span.setAttribute('dns.error.message', error.message || 'DNS lookup failed');
 
-          // Categorize common DNS errors
           if (error.code === 'ENOTFOUND') {
             span.setAttribute('dns.error.type', 'NOT_FOUND');
           } else if (error.code === 'ETIMEOUT') {
@@ -401,44 +487,81 @@ export function setupTracing(options = {}) {
     }));
   }
 
-  // Register instrumentations
-  registerInstrumentations({
-    tracerProvider: tracerProvider,
-    instrumentations: instrumentations,
+  sdk = new NodeSDK({
+    serviceName,
+    resource,
+    autoDetectResources: true,
+    resourceDetectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector, containerDetector],
+    sampler: new ParentBasedSampler({
+      root: new TraceIdRatioBasedSampler(samplingRatio),
+    }),
+    contextManager: new AsyncLocalStorageContextManager(),
+    textMapPropagator: new CompositePropagator({
+      propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+    }),
+    spanProcessors: [spanProcessor],
+    metricReaders,
+    instrumentations,
   });
+  sdk.start();
 
-  // Return the tracer for the service
-  return tracerProvider.getTracer(serviceName);
+  if (installSignalHandlers && !signalHandlers) {
+    const handler = () => {
+      stopTracing().finally(() => process.exit(0));
+    };
+    signalHandlers = {SIGTERM: handler, SIGINT: handler};
+    process.once('SIGTERM', handler);
+    process.once('SIGINT', handler);
+  }
+
+  return trace.getTracer(serviceName);
 }
 
 /**
-* Gracefully stops the tracing by shutting down the tracer provider.
+* Gracefully stops the tracing by shutting down the NodeSDK.
 *
-* This function ensures that all pending spans are exported and resources are
-* cleaned up properly. It is recommended to call this function during the
-* application's shutdown process.
+* Flushes pending spans and metrics via `sdk.shutdown()`, then releases the
+* global tracer / meter provider registrations on the OpenTelemetry API so a
+* subsequent `setupTracing()` call can register fresh providers (the API's
+* `setGlobalMeterProvider` and `setGlobalTracerProvider` are lock-once
+* without an explicit `disable()` call).
 *
 * @returns {Promise<void>} - A promise that resolves when shutdown is complete.
 */
 export async function stopTracing() {
-  if (tracerProvider) {
-    try {
-      await tracerProvider.shutdown();
-      tracerProvider = null;
-      console.info('Tracing has been successfully shut down.');
-    } catch (error) {
-      console.error('Error during tracing shutdown:', error);
-    }
-  } else {
+  if (signalHandlers) {
+    process.removeListener('SIGTERM', signalHandlers.SIGTERM);
+    process.removeListener('SIGINT', signalHandlers.SIGINT);
+    signalHandlers = null;
+  }
+  if (!sdk) {
     console.warn('Tracer provider is not initialized.');
+    return;
+  }
+  try {
+    await sdk.shutdown();
+    console.info('Tracing has been successfully shut down.');
+  } catch (error) {
+    console.error('Error during tracing shutdown:', error);
+  } finally {
+    metrics.disable();
+    trace.disable();
+    sdk = null;
   }
 }
 
 /**
  * @internal
- * Resets the tracer provider for testing purposes.
+ * Resets the SDK for testing purposes.
  * DO NOT use in production code.
  */
 export function __resetTracingForTesting() {
-  tracerProvider = null;
+  if (signalHandlers) {
+    process.removeListener('SIGTERM', signalHandlers.SIGTERM);
+    process.removeListener('SIGINT', signalHandlers.SIGINT);
+    signalHandlers = null;
+  }
+  metrics.disable();
+  trace.disable();
+  sdk = null;
 }
