@@ -17,9 +17,7 @@
  */
 
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
-import {AsyncHooksContextManager} from '@opentelemetry/context-async-hooks';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
-import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
@@ -101,29 +99,26 @@ export function setupTracing(options = {}) {
     exportTimeoutMillis: 10000,
   });
 
+  // Explicit attributes (service/container) must win over env detection, so
+  // detect first and merge the explicit resource on top. Only include defined
+  // keys so an undefined hostname does not write container.name: undefined.
+  const explicitAttributes = {[ATTR_SERVICE_NAME]: serviceName};
+  if (hostname) {
+    explicitAttributes[ATTR_CONTAINER_NAME] = hostname;
+  }
+
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: new resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: serviceName,
-      [ATTR_CONTAINER_NAME]: hostname,
-    }).merge(
-      detectResources({
-        detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
-      })
-    ),
-    autoDetectResources: true,
+    resource: detectResources({
+      detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
+    }).merge(resourceFromAttributes(explicitAttributes)),
   });
 
-  // Initialize the tracer provider with propagators
-  tracerProvider.register({
-    contextManager: new AsyncHooksContextManager().enable(),
-    propagator: new CompositePropagator({
-    propagators: [
-      new W3CTraceContextPropagator(),
-      new W3CBaggagePropagator(),
-      ],
-    }),
-  });
+  // Register globally. With no overrides, register() installs the modern
+  // AsyncLocalStorageContextManager and a CompositePropagator of
+  // W3CTraceContext + W3CBaggage - identical propagation to the previous
+  // explicit config, with the recommended context manager.
+  tracerProvider.register();
 
   // Ignore spans from static assets.
   const ignoreIncomingRequestHook = (req) => {
@@ -207,89 +202,68 @@ export function setupTracing(options = {}) {
       },
     }),
     new ExpressInstrumentation({
-      ignoreIncomingRequestHook,
-      requestHook: (span, request) => {
-        // Add Express-specific attributes
-        if (request.route?.path) {
-          span.setAttribute('express.route', request.route.path);
-          span.updateName(`${request.method} ${request.route.path}`);
+      requestHook: (span, info) => {
+        // info is ExpressRequestInfo: { request, route, layerType }
+        const request = info.request;
+        if (info.route) {
+          span.setAttribute('express.route', info.route);
+          if (request?.method) {
+            span.updateName(`${request.method} ${info.route}`);
+          }
         }
-        if (request.params && Object.keys(request.params).length > 0) {
+        if (request?.params && Object.keys(request.params).length > 0) {
           span.setAttribute('express.params', JSON.stringify(request.params));
         }
-        if (request.query && Object.keys(request.query).length > 0) {
+        if (request?.query && Object.keys(request.query).length > 0) {
           span.setAttribute('express.query', JSON.stringify(request.query));
         }
         // Add user context if available
-        if (request.user?.id) {
+        if (request?.user?.id) {
           span.setAttribute('user.id', request.user.id);
         }
       },
     }),
     new PinoInstrumentation({
       logHook: (span, record) => {
-        // Inject trace context into log records
-        const spanContext = span.spanContext();
-        record['trace_id'] = spanContext.traceId;
-        record['span_id'] = spanContext.spanId;
-        record['trace_flags'] = `0${spanContext.traceFlags.toString(16)}`;
-
-        // Add service name for better log correlation
+        // trace_id/span_id/trace_flags are injected by the instrumentation by
+        // default; only add service name for better log correlation.
         if (serviceName) {
           record['service.name'] = serviceName;
         }
       },
-      logSeverity: {
-        error: 'ERROR',
-        warn: 'WARN',
-        info: 'INFO',
-        debug: 'DEBUG',
-        trace: 'TRACE',
-      },
     }),
-    new ConnectInstrumentation({
-      ignoreIncomingRequestHook,
-      requestHook: (span, request) => {
-        // Add Connect middleware attributes
-        if (request.url) {
-          span.setAttribute('connect.url', request.url);
-        }
-        if (request.method) {
-          span.setAttribute('connect.method', request.method);
-        }
-      },
-    }),
+    // ConnectInstrumentation accepts only the base InstrumentationConfig; it has
+    // no request/ignore hooks, so configure it with defaults.
+    new ConnectInstrumentation(),
     new AwsInstrumentation({
       suppressInternalInstrumentation: false,
       sqsExtractContextPropagationFromPayload: true,
-      preRequestHook: (span, request) => {
-        // Add peer.service attribute for better service map visualization
-        const serviceName = request.serviceName || request.service?.serviceIdentifier;
-        if (serviceName) {
-          span.setAttribute('peer.service', serviceName.toLowerCase());
-          span.setAttribute('aws.service', serviceName.toLowerCase());
+      preRequestHook: (span, requestInfo) => {
+        // requestInfo is AwsSdkRequestHookInformation: { request: NormalizedRequest }
+        const awsServiceName = requestInfo.request?.serviceName;
+        if (awsServiceName) {
+          span.setAttribute('peer.service', awsServiceName.toLowerCase());
+          span.setAttribute('aws.service', awsServiceName.toLowerCase());
         }
       },
-      responseHook: (span, response) => {
-        // Add additional attributes from response if available
-        if (response?.requestId) {
-          span.setAttribute('aws.request_id', response.requestId);
+      responseHook: (span, responseInfo) => {
+        // responseInfo is AwsSdkResponseHookInformation: { response: NormalizedResponse }
+        const requestId = responseInfo.response?.requestId;
+        if (requestId) {
+          span.setAttribute('aws.request_id', requestId);
         }
       },
     }),
     new IORedisInstrumentation({
       requireParentSpan: false,
-      requestHook: (span, cmdName, cmdArgs) => {
-        // Set peer.service for service graph visualization - CRITICAL for Tempo
+      requestHook: (span, {cmdName, cmdArgs}) => {
+        // requestInfo is IORedisRequestHookInformation: { cmdName, cmdArgs }.
+        // Set peer.service for service graph visualization - CRITICAL for Tempo.
+        // The span is already created with SpanKind.CLIENT and net.peer.name is
+        // already set to the real host by the instrumentation, so we do not
+        // override those here.
         span.setAttribute('peer.service', 'redis');
         span.setAttribute('db.system', 'redis');
-        
-        // CRITICAL: Ensure span kind is CLIENT for service graph
-        span.setAttribute('span.kind', 'CLIENT');
-        
-        // Add network peer attributes (helps Tempo identify the service)
-        span.setAttribute('net.peer.name', 'redis');
-        span.setAttribute('db.connection_string', 'redis');
 
         // Add command details for better observability
         if (cmdName) {
@@ -348,56 +322,10 @@ export function setupTracing(options = {}) {
   if (enableDnsInstrumentation) {
     // Enable DNS instrumentation if specified
     // This instrumentation is useful for tracing DNS operations.
+    // DnsInstrumentationConfig only supports ignoreHostnames; it has no
+    // request/response/error hooks.
     instrumentations.push(new DnsInstrumentation({
       ignoreHostnames: ['localhost', '127.0.0.1', '::1'],
-      requestHook: (span, request) => {
-        // Add DNS query details for better observability
-        if (request.hostname) {
-          span.setAttribute('dns.hostname', request.hostname);
-          span.updateName(`DNS ${request.hostname}`);
-        }
-        if (request.rrtype) {
-          span.setAttribute('dns.record_type', request.rrtype);
-        }
-        // Add additional context
-        span.setAttribute('peer.service', 'dns');
-        span.setAttribute('dns.query_count', 1);
-      },
-      responseHook: (span, response) => {
-        // Add DNS response details
-        if (Array.isArray(response)) {
-          span.setAttribute('dns.result_count', response.length);
-          // Log first few results for debugging (limit to avoid overwhelming spans)
-          const resultSample = response.slice(0, 3).map(r => 
-            typeof r === 'string' ? r : JSON.stringify(r)
-          );
-          if (resultSample.length > 0) {
-            span.setAttribute('dns.results', JSON.stringify(resultSample));
-          }
-        } else if (response) {
-          span.setAttribute('dns.result_count', 1);
-          span.setAttribute('dns.result', typeof response === 'string' ? response : JSON.stringify(response));
-        }
-      },
-      errorHook: (span, error) => {
-        // Enhanced error tracking for DNS failures
-        if (error) {
-          span.setAttribute('dns.error', true);
-          span.setAttribute('dns.error.code', error.code || 'UNKNOWN');
-          span.setAttribute('dns.error.message', error.message || 'DNS lookup failed');
-
-          // Categorize common DNS errors
-          if (error.code === 'ENOTFOUND') {
-            span.setAttribute('dns.error.type', 'NOT_FOUND');
-          } else if (error.code === 'ETIMEOUT') {
-            span.setAttribute('dns.error.type', 'TIMEOUT');
-          } else if (error.code === 'ECONNREFUSED') {
-            span.setAttribute('dns.error.type', 'CONNECTION_REFUSED');
-          } else {
-            span.setAttribute('dns.error.type', 'OTHER');
-          }
-        }
-      },
     }));
   }
 

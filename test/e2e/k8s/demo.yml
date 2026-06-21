@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: monitoring
+  labels:
+    app: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      # Avoid k8s injecting REDIS_PORT=tcp://<ip>:6379 (service links), which
+      # would break parseInt(REDIS_PORT).
+      enableServiceLinks: false
+      containers:
+        - name: demo
+          image: tracing-e2e-demo:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SERVICE_NAME
+              value: tracing-e2e-demo
+            - name: ENDPOINT
+              value: "http://alloy.monitoring.svc.cluster.local:4317"
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: CONTAINER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+  namespace: monitoring
+spec:
+  selector:
+    app: demo
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
