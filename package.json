@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.21.0",
+  "version": "3.21.1",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -56,7 +56,6 @@
     "@opentelemetry/core": "^2.8.0"
   },
   "allowScripts": {
-    "fsevents@2.3.3": true,
     "protobufjs@7.6.4": true
   }
 }
