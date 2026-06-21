@@ -46,14 +46,14 @@
     "@opentelemetry/sdk-trace-base": "^2.8.0",
     "@opentelemetry/sdk-trace-node": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
-    "opentelemetry-instrumentation-elasticsearch": "^0.4.4"
+    "opentelemetry-instrumentation-elasticsearch": "^0.41.0"
   },
   "devDependencies": {
-    "eslint": "^10.5.0",
-    "jest": "^30.4.2"
+    "eslint": "^10.5.0"
   },
   "overrides": {
-    "protobufjs": "^7.5.3"
+    "protobufjs": "^7.5.3",
+    "@opentelemetry/core": "^2.8.0"
   },
   "allowScripts": {
     "fsevents@2.3.3": true,
