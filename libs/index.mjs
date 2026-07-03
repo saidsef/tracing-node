@@ -1,5 +1,3 @@
-'use strict';
-
 /*
  * Copyright Said Sef
  *
