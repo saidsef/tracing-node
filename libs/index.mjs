@@ -36,6 +36,15 @@ import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubatin
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
+// Set a non-negative integer span attribute from a header value; ignore invalid input.
+const setIntAttribute = (span, name, value) => {
+  if (!value) return;
+  const parsed = parseInt(value, 10);
+  if (!Number.isNaN(parsed) && parsed >= 0) {
+    span.setAttribute(name, parsed);
+  }
+};
+
 /**
 * Sets up tracing for the application using OpenTelemetry.
 *
@@ -120,11 +129,6 @@ export function setupTracing(options = {}) {
   // explicit config, with the recommended context manager.
   tracerProvider.register();
 
-  // Ignore spans from static assets.
-  const ignoreIncomingRequestHook = (req) => {
-    return req.url.startsWith('/metrics') || req.url.startsWith('/healthz');
-  };
-
   // Hook to set peer service name for outgoing requests
   const applyCustomAttributesOnSpan = (span, request) => {
     const url = request?.url || request?.uri || '';
@@ -149,7 +153,8 @@ export function setupTracing(options = {}) {
   const instrumentations = [
     new HttpInstrumentation({
       serverName: serviceName,
-      ignoreIncomingRequestHook,
+      // Ignore spans from static assets (metrics/health probes).
+      ignoreIncomingRequestHook: (req) => req.url.startsWith('/metrics') || req.url.startsWith('/healthz'),
       applyCustomAttributesOnSpan,
       requestHook: (span, request) => {
         // Enrich spans with additional HTTP request attributes
@@ -168,13 +173,7 @@ export function setupTracing(options = {}) {
         if (userAgent) span.setAttribute('http.user_agent', userAgent);
         if (contentType) span.setAttribute('http.request.content_type', contentType);
 
-        // Safe integer parsing with validation
-        if (contentLength) {
-          const length = parseInt(contentLength, 10);
-          if (!Number.isNaN(length) && length >= 0) {
-            span.setAttribute('http.request.content_length', length);
-          }
-        }
+        setIntAttribute(span, 'http.request.content_length', contentLength);
 
         // Correlation headers for distributed tracing
         if (requestId) span.setAttribute('http.request_id', requestId);
@@ -191,12 +190,7 @@ export function setupTracing(options = {}) {
 
         if (contentType) span.setAttribute('http.response.content_type', contentType);
 
-        if (contentLength) {
-          const length = parseInt(contentLength, 10);
-          if (!Number.isNaN(length) && length >= 0) {
-            span.setAttribute('http.response.content_length', length);
-          }
-        }
+        setIntAttribute(span, 'http.response.content_length', contentLength);
 
         if (requestId) span.setAttribute('http.request_id', requestId);
       },
@@ -282,20 +276,11 @@ export function setupTracing(options = {}) {
         }
       },
       responseHook: (span, cmdName, cmdArgs, response) => {
-        // Ensure peer.service persists through response
-        span.setAttribute('peer.service', 'redis');
-        span.setAttribute('db.system', 'redis');
-
-        // Add command details for better observability
-        if (cmdName) {
-          span.setAttribute('db.operation', cmdName.toUpperCase());
-        }
-
-        // Log response size if available
+        // peer.service, db.system and db.operation are already set on this span
+        // by requestHook and persist for the span's lifetime, so they are not
+        // re-set here. Record only the response shape for observability.
         if (response !== undefined && response !== null) {
-          const responseType = typeof response;
-          span.setAttribute('db.response.type', responseType);
-
+          span.setAttribute('db.response.type', typeof response);
           if (Array.isArray(response)) {
             span.setAttribute('db.response.count', response.length);
           }
