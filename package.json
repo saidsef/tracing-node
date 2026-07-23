@@ -38,7 +38,7 @@
     "@opentelemetry/instrumentation-dns": "^0.62.0",
     "@opentelemetry/instrumentation-express": "^0.67.0",
     "@opentelemetry/instrumentation-fs": "^0.38.0",
-    "@opentelemetry/instrumentation-http": "^0.219.0",
+    "@opentelemetry/instrumentation-http": "^0.220.0",
     "@opentelemetry/instrumentation-ioredis": "^0.68.0",
     "@opentelemetry/instrumentation-pino": "^0.66.0",
     "@opentelemetry/resources": "^2.8.0",
