@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "3.22.6",
+  "version": "4.0.0",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -31,30 +31,30 @@
   "homepage": "https://github.com/saidsef/tracing-node#readme",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.220.0",
-    "@opentelemetry/instrumentation": "^0.220.0",
-    "@opentelemetry/instrumentation-aws-sdk": "^0.75.0",
-    "@opentelemetry/instrumentation-connect": "^0.63.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.221.0",
+    "@opentelemetry/instrumentation": "^0.221.0",
+    "@opentelemetry/instrumentation-aws-sdk": "^0.76.0",
+    "@opentelemetry/instrumentation-connect": "^0.64.0",
     "@opentelemetry/instrumentation-dns": "^0.64.0",
-    "@opentelemetry/instrumentation-express": "^0.67.0",
+    "@opentelemetry/instrumentation-express": "^0.69.0",
     "@opentelemetry/instrumentation-fs": "^0.40.0",
-    "@opentelemetry/instrumentation-http": "^0.220.0",
-    "@opentelemetry/instrumentation-ioredis": "^0.68.0",
-    "@opentelemetry/instrumentation-pino": "^0.66.0",
-    "@opentelemetry/resources": "^2.8.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
-    "@opentelemetry/sdk-trace-node": "^2.8.0",
-    "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@opentelemetry/instrumentation-http": "^0.221.0",
+    "@opentelemetry/instrumentation-ioredis": "^0.69.0",
+    "@opentelemetry/instrumentation-pino": "^0.67.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "@opentelemetry/sdk-trace-node": "^2.10.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "opentelemetry-instrumentation-elasticsearch": "^0.41.0"
   },
   "devDependencies": {
-    "eslint": "^10.5.0"
+    "eslint": "^10.8.0"
   },
   "overrides": {
     "protobufjs": "^7.5.3",
-    "@opentelemetry/core": "^2.8.0"
+    "@opentelemetry/core": "^2.10.0"
   },
   "allowScripts": {
-    "protobufjs@7.6.4": true
+    "protobufjs@7.6.5": true
   }
 }
