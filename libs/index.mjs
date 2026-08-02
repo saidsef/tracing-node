@@ -43,6 +43,15 @@ const setIntAttribute = (span, name, value) => {
   }
 };
 
+// Slice before converting: String(buf) decodes a whole 1MB Buffer only to throw
+// it away. 4 bytes per UTF-16 unit plus slack keeps the result byte-identical.
+const truncateArg = (value, limit) => {
+  const str = Buffer.isBuffer(value) ? value.subarray(0, limit * 4 + 8).toString() : String(value);
+  return str.length > limit ? `${str.substring(0, limit)}...` : str;
+};
+
+let tracerProvider = null; // Declare provider in module scope for access in stopTracing
+
 /**
 * Sets up tracing for the application using OpenTelemetry.
 *
@@ -53,7 +62,7 @@ const setIntAttribute = (span, name, value) => {
 * service map visualization in distributed tracing tools like Tempo.
 *
 * @param {Object} options - Configuration options for tracing.
-* @param {string} [options.hostname=process.env.HOSTNAME] - The hostname of the service.
+* @param {string} [options.hostname=process.env.CONTAINER_NAME || process.env.HOSTNAME] - The hostname of the service.
 * @param {string} [options.serviceName=process.env.SERVICE_NAME] - The name of the service.
 * @param {string} [options.url=process.env.ENDPOINT] - The endpoint URL for the tracing collector.
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
@@ -62,12 +71,10 @@ const setIntAttribute = (span, name, value) => {
 *
 * @returns {Tracer} - The tracer for the service.
 */
-let tracerProvider = null; // Declare provider in module scope for access in stopTracing
-
 export function setupTracing(options = {}) {
   // Prevent multiple initializations - return existing provider if already set up
   if (tracerProvider) {
-    console.warn('Tracing is already initialized. Returning existing tracer.');
+    diag.warn('Tracing is already initialized. Returning existing tracer.');
     return tracerProvider.getTracer(options.serviceName || process.env.SERVICE_NAME);
   }
 
@@ -95,10 +102,8 @@ export function setupTracing(options = {}) {
     timeoutMillis: 10000,
   };
 
-  // Register the span processor with the tracer provider
   const exporter = new OTLPTraceExporter(exportOptions);
 
-  // Configure BatchSpanProcessor for production workloads
   const spanProcessor = new BatchSpanProcessor(exporter, {
     maxQueueSize: 4096,
     maxExportBatchSize: 1024,
@@ -127,69 +132,49 @@ export function setupTracing(options = {}) {
   // explicit config, with the recommended context manager.
   tracerProvider.register();
 
-  // Hook to set peer service name for outgoing requests
+  // Only an outgoing ClientRequest carries .host, so bailing without it keeps
+  // server spans out: peer.service must name the remote service being called.
   const applyCustomAttributesOnSpan = (span, request) => {
-    const url = request?.url || request?.uri || '';
-    const hostname = request?.hostname || request?.host || '';
-    
-    // Detect Elasticsearch endpoints
-    if (hostname.includes('elasticsearch') || url.includes('elasticsearch') || 
-        hostname.includes(':9200') || url.includes(':9200')) {
-      span.setAttribute('peer.service', 'elasticsearch');
-      span.setAttribute('db.system', 'elasticsearch');
-    }
+    const host = request?.host;
+    if (!host) return;
 
-    // Detect Redis endpoints
-    if (hostname.includes('redis') || url.includes('redis') || 
-        hostname.includes(':6379') || url.includes(':6379')) {
-      span.setAttribute('peer.service', 'redis');
-      span.setAttribute('db.system', 'redis');
+    for (const service of ['elasticsearch', 'redis']) {
+      if (host.includes(service)) {
+        span.setAttribute('peer.service', service);
+        span.setAttribute('db.system.name', service);
+        return;
+      }
     }
   };
 
-  // Register instrumentations
   const instrumentations = [
     new HttpInstrumentation({
-      serverName: serviceName,
       // Ignore spans from static assets (metrics/health probes).
       ignoreIncomingRequestHook: (req) => req.url.startsWith('/metrics') || req.url.startsWith('/healthz'),
       applyCustomAttributesOnSpan,
       requestHook: (span, request) => {
-        // Enrich spans with additional HTTP request attributes
-        if (!request.headers) return;
+        // Outgoing ClientRequest exposes getHeaders(); incoming IncomingMessage has .headers.
+        const headers = request.getHeaders?.() ?? request.headers;
+        if (!headers) return;
 
-        const headers = request.headers;
+        const contentType = headers['content-type'];
+        const requestId = headers['x-request-id'];
+        const correlationId = headers['x-correlation-id'];
 
-        // Safe header extraction with case-insensitive fallback
-        const userAgent = headers['user-agent'] || headers['User-Agent'];
-        const contentType = headers['content-type'] || headers['Content-Type'];
-        const contentLength = headers['content-length'] || headers['Content-Length'];
-        const requestId = headers['x-request-id'] || headers['X-Request-ID'];
-        const correlationId = headers['x-correlation-id'] || headers['X-Correlation-ID'];
-
-        // Only set attributes if values exist
-        if (userAgent) span.setAttribute('http.user_agent', userAgent);
         if (contentType) span.setAttribute('http.request.content_type', contentType);
-
-        setIntAttribute(span, 'http.request.content_length', contentLength);
-
-        // Correlation headers for distributed tracing
+        setIntAttribute(span, 'http.request.content_length', headers['content-length']);
         if (requestId) span.setAttribute('http.request_id', requestId);
         if (correlationId) span.setAttribute('http.correlation_id', correlationId);
       },
       responseHook: (span, response) => {
-        // Add response attributes for better observability
         if (!response.headers) return;
 
         const headers = response.headers;
-        const contentType = headers['content-type'] || headers['Content-Type'];
-        const contentLength = headers['content-length'] || headers['Content-Length'];
-        const requestId = headers['x-request-id'] || headers['X-Request-ID'];
+        const contentType = headers['content-type'];
+        const requestId = headers['x-request-id'];
 
         if (contentType) span.setAttribute('http.response.content_type', contentType);
-
-        setIntAttribute(span, 'http.response.content_length', contentLength);
-
+        setIntAttribute(span, 'http.response.content_length', headers['content-length']);
         if (requestId) span.setAttribute('http.request_id', requestId);
       },
     }),
@@ -249,17 +234,12 @@ export function setupTracing(options = {}) {
     new IORedisInstrumentation({
       requireParentSpan: false,
       requestHook: (span, {cmdName, cmdArgs}) => {
-        // requestInfo is IORedisRequestHookInformation: { cmdName, cmdArgs }.
-        // Set peer.service for service graph visualization - CRITICAL for Tempo.
-        // The span is already created with SpanKind.CLIENT and net.peer.name is
-        // already set to the real host by the instrumentation, so we do not
-        // override those here.
+        // peer.service drives the Tempo service graph and is never emitted by
+        // the instrumentation, so it has to be set here. db.system.name,
+        // db.operation.name and server.* already come from the instrumentation.
         span.setAttribute('peer.service', 'redis');
-        span.setAttribute('db.system', 'redis');
 
-        // Add command details for better observability
         if (cmdName) {
-          span.setAttribute('db.operation', cmdName.toUpperCase());
           span.updateName(`redis.${cmdName.toUpperCase()}`);
         }
 
@@ -274,9 +254,8 @@ export function setupTracing(options = {}) {
         }
       },
       responseHook: (span, cmdName, cmdArgs, response) => {
-        // peer.service, db.system and db.operation are already set on this span
-        // by requestHook and persist for the span's lifetime, so they are not
-        // re-set here. Record only the response shape for observability.
+        // peer.service is already set by requestHook and persists for the
+        // span's lifetime, so only the response shape is recorded here.
         if (response !== undefined && response !== null) {
           span.setAttribute('db.response.type', typeof response);
           if (Array.isArray(response)) {
@@ -285,37 +264,22 @@ export function setupTracing(options = {}) {
         }
       },
       dbStatementSerializer: (cmdName, cmdArgs) => {
-        // Serialize command for better observability (limit arg length to avoid huge spans)
-        const args = cmdArgs.map(arg => {
-          const str = String(arg);
-          return str.length > 100 ? `${str.substring(0, 100)}...` : str;
-        });
+        const args = cmdArgs.map(arg => truncateArg(arg, 100));
         return `${cmdName} ${args.join(' ')}`;
       },
     }),
     new ElasticsearchInstrumentation(),
+    // Spread so the optional instrumentations are constructed only when enabled:
+    // FsInstrumentation patches fs on construction.
+    ...(enableFsInstrumentation ? [new FsInstrumentation()] : []),
+    // DnsInstrumentationConfig accepts only ignoreHostnames; it has no hooks.
+    ...(enableDnsInstrumentation ? [new DnsInstrumentation({ignoreHostnames: ['localhost', '127.0.0.1', '::1']})] : []),
   ];
-
-  if (enableFsInstrumentation) {
-    // Enable fs instrumentation if specified
-    // This instrumentation is useful for tracing file system operations.
-    instrumentations.push(new FsInstrumentation());
-  }
-
-  if (enableDnsInstrumentation) {
-    // Enable DNS instrumentation if specified
-    // This instrumentation is useful for tracing DNS operations.
-    // DnsInstrumentationConfig only supports ignoreHostnames; it has no
-    // request/response/error hooks.
-    instrumentations.push(new DnsInstrumentation({
-      ignoreHostnames: ['localhost', '127.0.0.1', '::1'],
-    }));
-  }
 
   // Register instrumentations
   registerInstrumentations({
-    tracerProvider: tracerProvider,
-    instrumentations: instrumentations,
+    tracerProvider,
+    instrumentations,
   });
 
   // Return the tracer for the service
@@ -336,12 +300,12 @@ export async function stopTracing() {
     try {
       await tracerProvider.shutdown();
       tracerProvider = null;
-      console.info('Tracing has been successfully shut down.');
+      diag.info('Tracing has been successfully shut down.');
     } catch (error) {
-      console.error('Error during tracing shutdown:', error);
+      diag.error('Error during tracing shutdown:', error);
     }
   } else {
-    console.warn('Tracer provider is not initialized.');
+    diag.warn('Tracer provider is not initialized.');
   }
 }
 
