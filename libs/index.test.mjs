@@ -49,6 +49,20 @@ describe('setupTracing', () => {
     assert.ok(tracer, 'tracer should be defined');
   });
 
+  // globalThis.fetch runs on undici, so it is invisible to HttpInstrumentation.
+  // Registering it must not disturb setup, and the patch has to land on the
+  // global fetch itself - otherwise outgoing calls carry no traceparent.
+  it('should instrument global fetch', () => {
+    const before = globalThis.fetch;
+    const tracer = setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    assert.ok(tracer, 'tracer should be defined');
+    assert.strictEqual(typeof globalThis.fetch, 'function', 'global fetch should still be callable');
+    assert.ok(before, 'global fetch should exist on a supported runtime');
+  });
+
   it('should accept optional instrumentations', () => {
     const tracer = setupTracing({
       serviceName: 'test-service',

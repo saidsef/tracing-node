@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -23,7 +23,7 @@
   "author": "Said Sef <saidsef@gmail.com>",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">= 20"
+    "node": ">= 20.6.0"
   },
   "bugs": {
     "url": "https://github.com/saidsef/tracing-node/issues"
@@ -41,6 +41,7 @@
     "@opentelemetry/instrumentation-http": "^0.221.0",
     "@opentelemetry/instrumentation-ioredis": "^0.69.0",
     "@opentelemetry/instrumentation-pino": "^0.67.0",
+    "@opentelemetry/instrumentation-undici": "^0.31.0",
     "@opentelemetry/resources": "^2.10.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@opentelemetry/sdk-trace-node": "^2.10.0",

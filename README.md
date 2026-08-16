@@ -15,6 +15,7 @@ Effortlessly supercharge your applications with world-class distributed tracing!
 | Feature | Description |
 |---------|-------------|
 | HTTP/HTTPS instrumentation | Automatic service detection |
+| fetch/undici instrumentation | Outgoing `globalThis.fetch` calls |
 | Express.js support | Framework instrumentation |
 | Elasticsearch client | Database instrumentation |
 | IORedis client | Cache instrumentation |
