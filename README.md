@@ -31,6 +31,18 @@ Effortlessly supercharge your applications with world-class distributed tracing!
 - ...
 - Profit?
 
+## Where the traces go
+
+`setupTracing` exports OTLP over gRPC, so any OpenTelemetry-compatible collector or backend will take it - point `url` at yours.
+
+If you do not have one yet, [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) is a companion project that deploys the full LGTM+ stack - Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla - to Kubernetes with `kubectl apply -k ./deployment`, broken into small composable manifests rather than a single opaque chart. Send traces to its Alloy OTLP receiver and they land in Tempo, with the metrics-generator turning them into RED and service-graph metrics in Mimir:
+
+```javascript
+setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
+```
+
+The W3C Trace Context propagation this library registers is what lets Tempo pair a caller's client span with the callee's server span, which is what a service graph is built from.
+
 ## Instalation
 
 ```
@@ -93,7 +105,7 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 
 ## Source
 
-Our latest and greatest source of `tracing-node` can be found on [GitHub](https://github.com/saidsef/tracing-nodec/fork). Fork us!
+Our latest and greatest source of `tracing-node` can be found on [GitHub](https://github.com/saidsef/tracing-node/fork). Fork us!
 
 ## Contributing
 
