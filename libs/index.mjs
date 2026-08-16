@@ -25,6 +25,7 @@ import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
+import {UndiciInstrumentation} from '@opentelemetry/instrumentation-undici';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
@@ -48,6 +49,21 @@ const setIntAttribute = (span, name, value) => {
 const truncateArg = (value, limit) => {
   const str = Buffer.isBuffer(value) ? value.subarray(0, limit * 4 + 8).toString() : String(value);
   return str.length > limit ? `${str.substring(0, limit)}...` : str;
+};
+
+// Tempo names a service-graph node from peer.service, which no instrumentation
+// emits, so both the http and undici hooks below derive it from the remote host.
+const PEER_SERVICES = ['elasticsearch', 'redis'];
+
+const setPeerService = (span, host) => {
+  if (!host) return;
+  for (const service of PEER_SERVICES) {
+    if (host.includes(service)) {
+      span.setAttribute('peer.service', service);
+      span.setAttribute('db.system.name', service);
+      return;
+    }
+  }
 };
 
 let tracerProvider = null; // Declare provider in module scope for access in stopTracing
@@ -134,18 +150,7 @@ export function setupTracing(options = {}) {
 
   // Only an outgoing ClientRequest carries .host, so bailing without it keeps
   // server spans out: peer.service must name the remote service being called.
-  const applyCustomAttributesOnSpan = (span, request) => {
-    const host = request?.host;
-    if (!host) return;
-
-    for (const service of ['elasticsearch', 'redis']) {
-      if (host.includes(service)) {
-        span.setAttribute('peer.service', service);
-        span.setAttribute('db.system.name', service);
-        return;
-      }
-    }
-  };
+  const applyCustomAttributesOnSpan = (span, request) => setPeerService(span, request?.host);
 
   const instrumentations = [
     new HttpInstrumentation({
@@ -177,6 +182,14 @@ export function setupTracing(options = {}) {
         setIntAttribute(span, 'http.response.content_length', headers['content-length']);
         if (requestId) span.setAttribute('http.request_id', requestId);
       },
+    }),
+    // globalThis.fetch runs on undici, which never touches the http/https
+    // modules HttpInstrumentation patches. Without this, fetch calls produce no
+    // client span and inject no traceparent, so the callee starts a new trace
+    // and the two services can never be paired into a service-graph edge.
+    new UndiciInstrumentation({
+      // UndiciRequest exposes origin, not the .host the http hook reads.
+      requestHook: (span, request) => setPeerService(span, request?.origin),
     }),
     new ExpressInstrumentation({
       requestHook: (span, info) => {
