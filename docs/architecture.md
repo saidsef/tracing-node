@@ -15,8 +15,13 @@ flowchart LR
   G --> H[PeriodicExportingMetricReader]
   H --> I[OTLPMetricExporter<br/>gRPC]
   I --> F
+  B --> J[LoggerProvider]
+  J --> K[BatchLogRecordProcessor]
+  K --> L[OTLPLogExporter<br/>gRPC]
+  L --> F
   R[Resource detectors] --> C
   R --> G
+  R --> J
 ```
 
 | Stage | Component | Configuration |
@@ -28,6 +33,9 @@ flowchart LR
 | Meter provider | `MeterProvider` | Same resource as the tracer provider, registered as the global meter provider |
 | Metric reader | `PeriodicExportingMetricReader` | `exportIntervalMillis` from the options (default 60000) |
 | Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint) |
+| Logger provider | `LoggerProvider` | Same resource as the tracer provider, registered as the global logger provider |
+| Log processor | `BatchLogRecordProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
+| Log exporter | `OTLPLogExporter` | OTLP over gRPC, `logsUrl` from the options (default the trace endpoint) |
 
 Spans are batched rather than exported one at a time. A span is therefore visible in the backend up to `scheduledDelayMillis` after it ends, and a process that exits without calling [`stopTracing`](usage.md#shutdown) drops whatever is still queued.
 
@@ -39,7 +47,15 @@ The instrumentations record their measurements against whichever meter provider 
 
 Recording happens outside the sampler. The HTTP instrumentation records the duration after the span ends, without consulting the sampling decision, so metrics describe every request while traces describe a sampled subset.
 
-The resource is built once and passed to both providers. Grafana pairs a metric with a trace on `service.name`, which requires the two to be identical.
+## Logs
+
+The Pino instrumentation does two separate things. Log correlation adds `trace_id`, `span_id` and `trace_flags` to each record written to the application's own stream. Log sending routes a copy of each record to the OpenTelemetry logs API, and it is on by default.
+
+Log sending reaches a backend only when a logger provider is registered. Where none is, the record is parsed and rebuilt as a `LogRecord` and then handed to a no-op logger, so the cost is paid on every log line and nothing arrives. `setupTracing` registers a `LoggerProvider`, which turns that work into records delivered over OTLP, and sets `disableLogSending` when `enableLogs` is `false`, so the work stops rather than continuing for nothing.
+
+## Shared resource
+
+The resource is built once and passed to all three providers. Grafana pairs a metric and a log line with a trace on `service.name`, which requires them to be identical.
 
 ## Resource attributes
 
@@ -81,7 +97,7 @@ Only outgoing requests carry `host`, so the HTTP hook returns without setting an
 
 The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider, so repeated initialisation cannot register a second set of instrumentations or a second exporter against the same process.
 
-`stopTracing` awaits the tracer provider shutdown, which flushes queued spans, then the meter provider shutdown, which flushes a final metric export. It clears both module scope references and unregisters the global meter provider, since the API refuses a second registration while one is in place. A later `setupTracing` call therefore builds a fresh pipeline.
+`stopTracing` awaits the tracer provider shutdown, which flushes queued spans, then the meter provider shutdown, which flushes a final metric export, then the logger provider shutdown, which flushes queued log records. It clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call therefore builds a fresh pipeline.
 
 ## Diagnostics
 

@@ -2,7 +2,9 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { metrics } from '@opentelemetry/api';
+import { logs } from '@opentelemetry/api-logs';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
+import { LoggerProvider } from '@opentelemetry/sdk-logs';
 import { setupTracing, stopTracing, __resetTracingForTesting } from './index.mjs';
 
 describe('setupTracing', () => {
@@ -103,6 +105,53 @@ describe('setupTracing', () => {
     });
     assert.ok(tracer, 'tracer should be defined');
     assert.ok(metrics.getMeterProvider() instanceof MeterProvider, 'global meter provider should be the SDK one');
+  });
+
+  // The Pino instrumentation sends every log record to the Logs API whether or
+  // not a provider is registered. Without one the record is built and dropped.
+  it('should register a global logger provider by default', () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    assert.ok(logs.getLoggerProvider() instanceof LoggerProvider, 'global logger provider should be the SDK one');
+  });
+
+  it('should leave the no-op logger provider in place when logs are disabled', () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+      enableLogs: false,
+    });
+    assert.ok(!(logs.getLoggerProvider() instanceof LoggerProvider), 'no logger provider should be registered');
+  });
+
+  it('should accept a separate logs endpoint', () => {
+    const tracer = setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+      logsUrl: 'http://localhost:4318',
+    });
+    assert.ok(tracer, 'tracer should be defined');
+    assert.ok(logs.getLoggerProvider() instanceof LoggerProvider, 'global logger provider should be the SDK one');
+  });
+
+  // Without the unregister in stopTracing the API keeps the first provider and
+  // silently ignores the second registration.
+  it('should unregister the logger provider on shutdown', async () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    await stopTracing();
+    assert.ok(!(logs.getLoggerProvider() instanceof LoggerProvider), 'logger provider should be unregistered');
+
+    __resetTracingForTesting();
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    assert.ok(logs.getLoggerProvider() instanceof LoggerProvider, 'a later setup should register again');
   });
 
   // Without the unregister in stopTracing the API refuses the second

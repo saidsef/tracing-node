@@ -16,8 +16,16 @@ The suite runs on the Node test runner against `libs/index.test.mjs`, with `--tr
 | `hostname` given | Accepted and recorded |
 | Global fetch | Instrumented by the undici instrumentation |
 | Optional instrumentations | `enableFsInstrumentation` and `enableDnsInstrumentation` accepted |
+| Metrics enabled | A meter provider is registered globally |
+| `enableMetrics: false` | No meter provider is registered |
+| `metricsUrl` given | Accepted, and the provider is still registered |
+| Meter shutdown | The meter provider is unregistered, so a later setup registers again |
+| Logs enabled | A logger provider is registered globally |
+| `enableLogs: false` | No logger provider is registered |
+| `logsUrl` given | Accepted, and the provider is still registered |
+| Logger shutdown | The logger provider is unregistered, so a later setup registers again |
 
-The provider lives in module scope, so tests reset it between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
+The providers live in module scope, so tests reset them between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
 
 ## Linting
 
@@ -68,6 +76,7 @@ curl localhost:8080/work/1
 | Span names `GET /work/:id`, `redis.SET`, `redis.GET` | The trace view |
 | `peer.service: redis` on the Redis spans | Span attributes |
 | `trace_id` and `span_id` in the application logs | `kubectl -n monitoring logs deploy/demo` |
+| The same log lines, queryable by `service_name` | Loki |
 | A `tracing-e2e-demo` to `redis` edge | The Tempo service graph, once the metrics generator has run |
 
 No span appears for `/healthz`, because the HTTP instrumentation ignores it. The readiness probe therefore adds nothing to the trace store.

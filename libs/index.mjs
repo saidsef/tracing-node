@@ -22,7 +22,9 @@ import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
+import {logs} from '@opentelemetry/api-logs';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
+import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-grpc';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-grpc';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
@@ -31,6 +33,7 @@ import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
 import {RuntimeNodeInstrumentation} from '@opentelemetry/instrumentation-runtime-node';
 import {MeterProvider, PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
+import {BatchLogRecordProcessor, LoggerProvider} from '@opentelemetry/sdk-logs';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
 import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
@@ -71,6 +74,7 @@ const setPeerService = (span, host) => {
 
 let tracerProvider = null; // Declare provider in module scope for access in stopTracing
 let meterProvider = null;
+let loggerProvider = null;
 
 /**
 * Sets up tracing for the application using OpenTelemetry.
@@ -95,6 +99,8 @@ let meterProvider = null;
 * @param {boolean} [options.enableMetrics=true] - Export metrics as well as traces.
 * @param {string} [options.metricsUrl=options.url] - Endpoint for metrics, when it differs from the trace endpoint.
 * @param {number} [options.metricExportIntervalMillis=60000] - How often metrics are exported.
+* @param {boolean} [options.enableLogs=true] - Send Pino log records over OTLP.
+* @param {string} [options.logsUrl=options.url] - Endpoint for logs, when it differs from the trace endpoint.
 *
 * @returns {Tracer} - The tracer for the service.
 */
@@ -115,6 +121,8 @@ export function setupTracing(options = {}) {
     enableMetrics = true,
     metricsUrl = url,
     metricExportIntervalMillis = 60000,
+    enableLogs = true,
+    logsUrl = url,
   } = options;
 
   // Validate required parameters
@@ -149,8 +157,8 @@ export function setupTracing(options = {}) {
     explicitAttributes[ATTR_CONTAINER_NAME] = hostname;
   }
 
-  // One resource for both signals. Grafana pairs a metric with a trace on
-  // service.name, so the two providers have to carry an identical resource.
+  // One resource for every signal. Grafana pairs a metric and a log line with
+  // a trace on service.name, so the providers carry an identical resource.
   const resource = detectResources({
     detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
   }).merge(resourceFromAttributes(explicitAttributes));
@@ -171,6 +179,22 @@ export function setupTracing(options = {}) {
       ],
     });
     metrics.setGlobalMeterProvider(meterProvider);
+  }
+
+  if (enableLogs) {
+    loggerProvider = new LoggerProvider({
+      resource,
+      processors: [
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({...exportOptions, url: logsUrl}),
+          maxQueueSize: 4096,
+          maxExportBatchSize: 1024,
+          scheduledDelayMillis: 2000,
+          exportTimeoutMillis: 10000,
+        }),
+      ],
+    });
+    logs.setGlobalLoggerProvider(loggerProvider);
   }
 
   // Register globally. With no overrides, register() installs the modern
@@ -245,6 +269,10 @@ export function setupTracing(options = {}) {
       },
     }),
     new PinoInstrumentation({
+      // Log sending is on by default, and every record is parsed and rebuilt as
+      // a LogRecord before it reaches a logger. With no logger provider that
+      // work is done for a no-op, so turn it off rather than pay for nothing.
+      disableLogSending: !enableLogs,
       logHook: (span, record) => {
         // trace_id/span_id/trace_flags are injected by the instrumentation by
         // default; only add service name for better log correlation.
@@ -329,6 +357,7 @@ export function setupTracing(options = {}) {
   registerInstrumentations({
     tracerProvider,
     meterProvider,
+    loggerProvider,
     instrumentations,
   });
 
@@ -337,11 +366,11 @@ export function setupTracing(options = {}) {
 }
 
 /**
-* Gracefully stops the tracing by shutting down the tracer and meter providers.
+* Gracefully stops the tracing by shutting down every provider it registered.
 *
-* This function ensures that all pending spans and metrics are exported and
-* resources are cleaned up properly. It is recommended to call this function
-* during the application's shutdown process.
+* This function ensures that all pending spans, metrics and log records are
+* exported and resources are cleaned up properly. It is recommended to call
+* this function during the application's shutdown process.
 *
 * @returns {Promise<void>} - A promise that resolves when shutdown is complete.
 */
@@ -372,6 +401,20 @@ export async function stopTracing() {
       diag.error('Error during metrics shutdown:', error);
     }
   }
+
+  if (loggerProvider) {
+    try {
+      await loggerProvider.shutdown();
+      diag.info('Logs have been successfully shut down.');
+    } catch (error) {
+      diag.error('Error during logs shutdown:', error);
+    } finally {
+      // A second setGlobalLoggerProvider is ignored, so unregister whatever the
+      // flush did, or a later setupTracing keeps writing to a dead provider.
+      loggerProvider = null;
+      logs.disable();
+    }
+  }
 }
 
 /**
@@ -382,4 +425,5 @@ export async function stopTracing() {
 export function __resetTracingForTesting() {
   tracerProvider = null;
   meterProvider = null;
+  loggerProvider = null;
 }
