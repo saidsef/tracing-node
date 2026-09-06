@@ -47,6 +47,11 @@ setupTracing({
   concurrencyLimit: 10,
   enableFsInstrumentation: false,
   enableDnsInstrumentation: false,
+  enableMetrics: true,
+  metricsUrl: 'http://alloy:4317',
+  metricExportIntervalMillis: 60000,
+  enableLogs: true,
+  logsUrl: 'http://alloy:4317',
 });
 ```
 
@@ -58,6 +63,11 @@ setupTracing({
 | `concurrencyLimit` | number | Concurrent exports the exporter allows | No | `10` |
 | `enableFsInstrumentation` | boolean | Enable file system instrumentation | No | `false` |
 | `enableDnsInstrumentation` | boolean | Enable DNS instrumentation | No | `false` |
+| `enableMetrics` | boolean | Register a meter provider and export metrics | No | `true` |
+| `metricsUrl` | string | Metrics endpoint, when it differs from the trace endpoint | No | `url` |
+| `metricExportIntervalMillis` | number | Interval between metric exports | No | `60000` |
+| `enableLogs` | boolean | Register a logger provider and export Pino log records | No | `true` |
+| `logsUrl` | string | Logs endpoint, when it differs from the trace endpoint | No | `url` |
 
 `setupTracing` throws `Error: serviceName is required` or `Error: url is required` when neither the option nor its environment variable supplies a value.
 
@@ -71,6 +81,26 @@ setupTracing({
 | `HOSTNAME` | `hostname`, when `CONTAINER_NAME` is unset | No |
 
 An option passed to `setupTracing` takes precedence over the matching environment variable. `OTEL_RESOURCE_ATTRIBUTES` is read by the environment resource detector, and any `service.name` it carries is overridden by the explicit one.
+
+## Metrics
+
+Metrics are exported by default, over OTLP gRPC, to the same endpoint as traces. An OpenTelemetry Collector or Grafana Alloy accepts all signals on port 4317, so a single endpoint covers both. Point `metricsUrl` elsewhere where the trace endpoint takes traces alone, for example a Tempo OTLP receiver, and set `enableMetrics` to `false` where metrics are not wanted at all.
+
+Aggregation temporality is cumulative, which is what Prometheus and Mimir expect. `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` overrides it.
+
+The export interval is 60 seconds. A shorter interval raises resolution and the volume written to the backend in equal measure.
+
+Metric recording sits outside the sampler. A request is counted in `http.server.request.duration` whether or not its span is sampled, so `OTEL_TRACES_SAMPLER` can be turned down without the metrics losing accuracy.
+
+## Logs
+
+Pino log records are exported by default, over OTLP gRPC, to the same endpoint as traces. Each record carries the trace id and span id of the request that wrote it, which is what links a log line to its trace in Grafana. The application keeps writing to its own stream, so container logs are unchanged.
+
+The Pino instrumentation sends records to the OpenTelemetry logs API whether or not a logger provider is registered. Where no provider exists, each record is still parsed and rebuilt before being handed to a no-op logger. Setting `enableLogs` to `false` disables log sending at the instrumentation, so that work is not done at all.
+
+Point `logsUrl` elsewhere where the trace endpoint does not accept logs.
+
+Log export covers Pino alone. An application logging through anything else is unaffected by these options.
 
 ## Optional instrumentations
 
@@ -107,9 +137,9 @@ process.on('SIGTERM', async () => {
 });
 ```
 
-`stopTracing` awaits the provider shutdown, which flushes the batch processor, then clears the provider so a later `setupTracing` call builds a fresh one. It logs a warning and returns when tracing was never initialised, and logs an error rather than throwing when shutdown fails.
+`stopTracing` awaits the tracer provider shutdown, which flushes the batch span processor, then the meter provider shutdown, which flushes a final metric export, then the logger provider shutdown, which flushes queued log records. Each is awaited separately, so a failing exporter on one signal still lets the others flush. The providers are then cleared, so a later `setupTracing` call builds a fresh pipeline. `stopTracing` logs a warning and returns when tracing was never initialised, and logs an error rather than throwing when shutdown fails.
 
-Spans are batched, so a process that exits without this loses whatever is still queued.
+Spans and log records are batched, and metrics are exported on an interval, so a process that exits without this loses whatever is still queued.
 
 ## Repeated initialisation
 

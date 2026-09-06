@@ -17,17 +17,23 @@
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
-import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
+import {diag, DiagConsoleLogger, DiagLogLevel, metrics} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation, ExpressLayerType} from '@opentelemetry/instrumentation-express';
+import {logs} from '@opentelemetry/api-logs';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
+import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-grpc';
+import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-grpc';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {UndiciInstrumentation} from '@opentelemetry/instrumentation-undici';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
+import {RuntimeNodeInstrumentation} from '@opentelemetry/instrumentation-runtime-node';
+import {MeterProvider, PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
+import {BatchLogRecordProcessor, LoggerProvider} from '@opentelemetry/sdk-logs';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
 import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
@@ -93,6 +99,8 @@ const expressRequestHook = (span, info) => {
 };
 
 let tracerProvider = null; // Declare provider in module scope for access in stopTracing
+let meterProvider = null;
+let loggerProvider = null;
 
 /**
 * Sets up tracing for the application using OpenTelemetry.
@@ -103,6 +111,10 @@ let tracerProvider = null; // Declare provider in module scope for access in sto
 * The IORedis instrumentation includes peer.service attributes for proper
 * service map visualization in distributed tracing tools like Tempo.
 *
+* A MeterProvider is registered alongside it, which is what makes the
+* instrumentations record the request duration histograms they already
+* compute, and adds the Node runtime metrics.
+*
 * @param {Object} options - Configuration options for tracing.
 * @param {string} [options.hostname=process.env.CONTAINER_NAME || process.env.HOSTNAME] - The hostname of the service.
 * @param {string} [options.serviceName=process.env.SERVICE_NAME] - The name of the service.
@@ -110,6 +122,11 @@ let tracerProvider = null; // Declare provider in module scope for access in sto
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
 * @param {boolean} [options.enableFsInstrumentation=false] - Enable file system instrumentation.
 * @param {boolean} [options.enableDnsInstrumentation=false] - Enable DNS instrumentation.
+* @param {boolean} [options.enableMetrics=true] - Export metrics as well as traces.
+* @param {string} [options.metricsUrl=options.url] - Endpoint for metrics, when it differs from the trace endpoint.
+* @param {number} [options.metricExportIntervalMillis=60000] - How often metrics are exported.
+* @param {boolean} [options.enableLogs=true] - Send Pino log records over OTLP.
+* @param {string} [options.logsUrl=options.url] - Endpoint for logs, when it differs from the trace endpoint.
 *
 * @returns {Tracer} - The tracer for the service.
 */
@@ -127,6 +144,11 @@ export function setupTracing(options = {}) {
     concurrencyLimit = 10,
     enableFsInstrumentation = false,
     enableDnsInstrumentation = false,
+    enableMetrics = true,
+    metricsUrl = url,
+    metricExportIntervalMillis = 60000,
+    enableLogs = true,
+    logsUrl = url,
   } = options;
 
   // Validate required parameters
@@ -161,12 +183,45 @@ export function setupTracing(options = {}) {
     explicitAttributes[ATTR_CONTAINER_NAME] = hostname;
   }
 
+  // One resource for every signal. Grafana pairs a metric and a log line with
+  // a trace on service.name, so the providers carry an identical resource.
+  const resource = detectResources({
+    detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
+  }).merge(resourceFromAttributes(explicitAttributes));
+
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: detectResources({
-      detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
-    }).merge(resourceFromAttributes(explicitAttributes)),
+    resource,
   });
+
+  if (enableMetrics) {
+    meterProvider = new MeterProvider({
+      resource,
+      readers: [
+        new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter({...exportOptions, url: metricsUrl}),
+          exportIntervalMillis: metricExportIntervalMillis,
+        }),
+      ],
+    });
+    metrics.setGlobalMeterProvider(meterProvider);
+  }
+
+  if (enableLogs) {
+    loggerProvider = new LoggerProvider({
+      resource,
+      processors: [
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({...exportOptions, url: logsUrl}),
+          maxQueueSize: 4096,
+          maxExportBatchSize: 1024,
+          scheduledDelayMillis: 2000,
+          exportTimeoutMillis: 10000,
+        }),
+      ],
+    });
+    logs.setGlobalLoggerProvider(loggerProvider);
+  }
 
   // Register globally. With no overrides, register() installs the modern
   // AsyncLocalStorageContextManager and a CompositePropagator of
@@ -221,6 +276,10 @@ export function setupTracing(options = {}) {
       requestHook: expressRequestHook,
     }),
     new PinoInstrumentation({
+      // Log sending is on by default, and every record is parsed and rebuilt as
+      // a LogRecord before it reaches a logger. With no logger provider that
+      // work is done for a no-op, so turn it off rather than pay for nothing.
+      disableLogSending: !enableLogs,
       logHook: (span, record) => {
         // trace_id/span_id/trace_flags are injected by the instrumentation by
         // default; only add service name for better log correlation.
@@ -289,6 +348,10 @@ export function setupTracing(options = {}) {
       },
     }),
     new ElasticsearchInstrumentation(),
+    // Event loop delay, GC pauses and heap occupancy are metric-only, and they
+    // are what explains a whole service slowing at once. Constructed only with
+    // metrics on, since the collectors start sampling on construction.
+    ...(enableMetrics ? [new RuntimeNodeInstrumentation()] : []),
     // Spread so the optional instrumentations are constructed only when enabled:
     // FsInstrumentation patches fs on construction.
     ...(enableFsInstrumentation ? [new FsInstrumentation()] : []),
@@ -296,9 +359,12 @@ export function setupTracing(options = {}) {
     ...(enableDnsInstrumentation ? [new DnsInstrumentation({ignoreHostnames: ['localhost', '127.0.0.1', '::1']})] : []),
   ];
 
-  // Register instrumentations
+  // Register instrumentations. Without meterProvider the instrumentations get
+  // the no-op meter, and the histograms they already record are discarded.
   registerInstrumentations({
     tracerProvider,
+    meterProvider,
+    loggerProvider,
     instrumentations,
   });
 
@@ -307,11 +373,11 @@ export function setupTracing(options = {}) {
 }
 
 /**
-* Gracefully stops the tracing by shutting down the tracer provider.
+* Gracefully stops the tracing by shutting down every provider it registered.
 *
-* This function ensures that all pending spans are exported and resources are
-* cleaned up properly. It is recommended to call this function during the
-* application's shutdown process.
+* This function ensures that all pending spans, metrics and log records are
+* exported and resources are cleaned up properly. It is recommended to call
+* this function during the application's shutdown process.
 *
 * @returns {Promise<void>} - A promise that resolves when shutdown is complete.
 */
@@ -326,6 +392,35 @@ export async function stopTracing() {
     }
   } else {
     diag.warn('Tracer provider is not initialized.');
+  }
+
+  // Separate from the trace shutdown, so a failing exporter on one signal
+  // still lets the other flush.
+  if (meterProvider) {
+    try {
+      await meterProvider.shutdown();
+      meterProvider = null;
+      // The API refuses a second setGlobalMeterProvider, so unregister here or
+      // a later setupTracing leaves the global pointing at a dead provider.
+      metrics.disable();
+      diag.info('Metrics have been successfully shut down.');
+    } catch (error) {
+      diag.error('Error during metrics shutdown:', error);
+    }
+  }
+
+  if (loggerProvider) {
+    try {
+      await loggerProvider.shutdown();
+      diag.info('Logs have been successfully shut down.');
+    } catch (error) {
+      diag.error('Error during logs shutdown:', error);
+    } finally {
+      // A second setGlobalLoggerProvider is ignored, so unregister whatever the
+      // flush did, or a later setupTracing keeps writing to a dead provider.
+      loggerProvider = null;
+      logs.disable();
+    }
   }
 }
 
@@ -343,4 +438,6 @@ export const __expressRequestHookForTesting = expressRequestHook;
  */
 export function __resetTracingForTesting() {
   tracerProvider = null;
+  meterProvider = null;
+  loggerProvider = null;
 }

@@ -25,6 +25,27 @@ Instrumentation patches a module as it loads. A library imported before `setupTr
 
 `globalThis.fetch` runs on undici rather than the `http` module. The undici instrumentation covers it and is always registered, so a missing fetch span points at the initialisation order rather than at configuration.
 
+## No metrics reach the collector
+
+| Cause | Check | Fix |
+|-------|-------|-----|
+| Metrics disabled | Whether `enableMetrics` is `false` | Leave it unset, since it defaults to `true` |
+| Endpoint takes traces alone | Exporter errors naming the metrics service on stdout | Point `metricsUrl` at a receiver that accepts metrics, such as an OpenTelemetry Collector or Grafana Alloy |
+| Nothing exported yet | How long the process has been running | Metrics are exported every 60 seconds by default, so the first export lags startup |
+
+Delta temporality reaching a Prometheus backend produces gaps rather than errors. The exporter defaults to cumulative, so check `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` where the series look wrong.
+
+## No logs reach the collector
+
+| Cause | Check | Fix |
+|-------|-------|-----|
+| Log export disabled | Whether `enableLogs` is `false` | Leave it unset, since it defaults to `true` |
+| Endpoint takes traces alone | Exporter errors naming the logs service on stdout | Point `logsUrl` at a receiver that accepts logs, such as an OpenTelemetry Collector or Grafana Alloy |
+| The application does not use Pino | Which logger writes the records | Log export covers Pino alone |
+| Pino older than 7 | The installed Pino version | Log sending needs `pino.multistream`, added in Pino 7 |
+
+Records still reach the application's own stream in every one of these cases, so logs missing from the backend while present in the container output point here rather than at the logger.
+
 ## The trace stops at a service boundary
 
 A callee starting a new trace instead of continuing the caller's one means the `traceparent` header was not propagated. Check that the outgoing call goes through an instrumented client, and that no proxy in between strips the header.
@@ -46,6 +67,10 @@ A second `setupTracing` call logs this warning and returns the tracer from the e
 ## Probes and scrapes appear as traces
 
 They should not. Incoming requests to paths starting with `/metrics` or `/healthz` are ignored. A probe on any other path produces a span, so either move the probe or expect it in the trace store.
+
+## Traces and metrics disagree on request counts
+
+They measure different populations. A metric is recorded for every request, and a trace is kept for a sampled fraction, so the two match only where sampling is off. Backend generated metrics such as Tempo's `traces_spanmetrics_calls_total` are built from the spans that arrived, and so follow the sampled fraction rather than the metrics this library exports.
 
 ## Express spans all share one name
 
