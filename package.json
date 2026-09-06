@@ -53,14 +53,6 @@
   "devDependencies": {
     "eslint": "^10.8.0"
   },
-  "docs": {
-    "pip": [
-      "mkdocs>=1.6",
-      "mkdocs-material>=9.5",
-      "pymdown-extensions>=10.7",
-      "pygments>=2.18"
-    ]
-  },
   "overrides": {
     "protobufjs": "^7.5.3",
     "@opentelemetry/core": "^2.10.0"
