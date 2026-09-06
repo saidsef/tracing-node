@@ -47,6 +47,9 @@ setupTracing({
   concurrencyLimit: 10,
   enableFsInstrumentation: false,
   enableDnsInstrumentation: false,
+  enableMetrics: true,
+  metricsUrl: 'http://alloy:4317',
+  metricExportIntervalMillis: 60000,
 });
 ```
 
@@ -58,6 +61,9 @@ setupTracing({
 | `concurrencyLimit` | number | Concurrent exports the exporter allows | No | `10` |
 | `enableFsInstrumentation` | boolean | Enable file system instrumentation | No | `false` |
 | `enableDnsInstrumentation` | boolean | Enable DNS instrumentation | No | `false` |
+| `enableMetrics` | boolean | Register a meter provider and export metrics | No | `true` |
+| `metricsUrl` | string | Metrics endpoint, when it differs from the trace endpoint | No | `url` |
+| `metricExportIntervalMillis` | number | Interval between metric exports | No | `60000` |
 
 `setupTracing` throws `Error: serviceName is required` or `Error: url is required` when neither the option nor its environment variable supplies a value.
 
@@ -71,6 +77,16 @@ setupTracing({
 | `HOSTNAME` | `hostname`, when `CONTAINER_NAME` is unset | No |
 
 An option passed to `setupTracing` takes precedence over the matching environment variable. `OTEL_RESOURCE_ATTRIBUTES` is read by the environment resource detector, and any `service.name` it carries is overridden by the explicit one.
+
+## Metrics
+
+Metrics are exported by default, over OTLP gRPC, to the same endpoint as traces. An OpenTelemetry Collector or Grafana Alloy accepts all signals on port 4317, so a single endpoint covers both. Point `metricsUrl` elsewhere where the trace endpoint takes traces alone, for example a Tempo OTLP receiver, and set `enableMetrics` to `false` where metrics are not wanted at all.
+
+Aggregation temporality is cumulative, which is what Prometheus and Mimir expect. `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` overrides it.
+
+The export interval is 60 seconds. A shorter interval raises resolution and the volume written to the backend in equal measure.
+
+Metric recording sits outside the sampler. A request is counted in `http.server.request.duration` whether or not its span is sampled, so `OTEL_TRACES_SAMPLER` can be turned down without the metrics losing accuracy.
 
 ## Optional instrumentations
 
@@ -107,9 +123,9 @@ process.on('SIGTERM', async () => {
 });
 ```
 
-`stopTracing` awaits the provider shutdown, which flushes the batch processor, then clears the provider so a later `setupTracing` call builds a fresh one. It logs a warning and returns when tracing was never initialised, and logs an error rather than throwing when shutdown fails.
+`stopTracing` awaits the tracer provider shutdown, which flushes the batch processor, then the meter provider shutdown, which flushes a final metric export. Each is awaited separately, so a failing exporter on one signal still lets the other flush. The providers are then cleared, so a later `setupTracing` call builds a fresh pipeline. `stopTracing` logs a warning and returns when tracing was never initialised, and logs an error rather than throwing when shutdown fails.
 
-Spans are batched, so a process that exits without this loses whatever is still queued.
+Spans are batched and metrics are exported on an interval, so a process that exits without this loses whatever is still queued.
 
 ## Repeated initialisation
 

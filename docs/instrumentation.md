@@ -1,6 +1,14 @@
 # Instrumentation
 
-Every instrumentation below is registered by `setupTracing`, apart from the two that are enabled per option. Each entry lists the attributes this library adds on top of what the instrumentation already emits.
+Every instrumentation below is registered by `setupTracing`, apart from those that are enabled per option. Each entry lists the attributes this library adds on top of what the instrumentation already emits.
+
+Several instrumentations record metrics as well as spans. Those measurements reach the backend only when a meter provider is registered, which `setupTracing` does unless `enableMetrics` is `false`.
+
+| Metric | Emitted by |
+|--------|------------|
+| `http.server.request.duration` | HTTP |
+| `http.client.request.duration` | HTTP, Undici |
+| `gen_ai.client.token.usage`, `gen_ai.client.operation.duration` | AWS SDK, for Bedrock calls |
 
 | Instrumentation | Package | Enabled |
 |-----------------|---------|---------|
@@ -12,6 +20,7 @@ Every instrumentation below is registered by `setupTracing`, apart from the two 
 | AWS SDK | `@opentelemetry/instrumentation-aws-sdk` | Always |
 | IORedis | `@opentelemetry/instrumentation-ioredis` | Always |
 | Elasticsearch | `opentelemetry-instrumentation-elasticsearch` | Always |
+| Node runtime | `@opentelemetry/instrumentation-runtime-node` | `enableMetrics` |
 | File system | `@opentelemetry/instrumentation-fs` | `enableFsInstrumentation` |
 | DNS | `@opentelemetry/instrumentation-dns` | `enableDnsInstrumentation` |
 
@@ -92,6 +101,21 @@ Correlating logs with traces in Grafana relies on those ids being in the log rec
 Spans are renamed to `redis.COMMAND`, for example `redis.SET`. `db.system.name`, `db.operation.name` and the `server.*` attributes come from the instrumentation itself.
 
 The statement serialiser truncates each argument to 100 characters and appends an ellipsis. A `Buffer` argument is sliced before it is decoded, so a large value is not converted in full only to be discarded.
+
+## Node runtime
+
+Registered when `enableMetrics` is set, which is the default. It produces metrics alone, with no spans, and it is constructed only when metrics are enabled because its collectors begin sampling on construction.
+
+| Metric | Description |
+|--------|-------------|
+| `nodejs.eventloop.delay.min`, `.max`, `.mean`, `.stddev`, `.p50`, `.p90`, `.p99` | Event loop delay distribution |
+| `nodejs.eventloop.utilization` | Fraction of the loop spent active |
+| `nodejs.eventloop.time` | Time in the loop, split by `nodejs.eventloop.state` of `active` or `idle` |
+| `v8js.gc.duration` | Garbage collection pause duration, by `v8js.gc.type` |
+| `v8js.memory.heap.used`, `v8js.memory.heap.space.available_size`, `v8js.memory.heap.space.physical_size` | Heap occupancy per heap space |
+| `v8js.resource.active` | Active handles and requests, by `v8js.resource.type` |
+
+Event loop saturation slows every operation in a process at once. No span attribute carries it, which is what these metrics are for.
 
 ## Elasticsearch
 

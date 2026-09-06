@@ -11,7 +11,12 @@ flowchart LR
   C --> D[BatchSpanProcessor]
   D --> E[OTLPTraceExporter<br/>gRPC]
   E --> F[Collector]
+  B --> G[MeterProvider]
+  G --> H[PeriodicExportingMetricReader]
+  H --> I[OTLPMetricExporter<br/>gRPC]
+  I --> F
   R[Resource detectors] --> C
+  R --> G
 ```
 
 | Stage | Component | Configuration |
@@ -20,8 +25,21 @@ flowchart LR
 | Processor | `BatchSpanProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
 | Exporter | `OTLPTraceExporter` | OTLP over gRPC, `timeoutMillis` 10000, `concurrencyLimit` from the options (default 10) |
 | Registration | `tracerProvider.register()` | Installs the async local storage context manager and a composite W3C Trace Context and baggage propagator |
+| Meter provider | `MeterProvider` | Same resource as the tracer provider, registered as the global meter provider |
+| Metric reader | `PeriodicExportingMetricReader` | `exportIntervalMillis` from the options (default 60000) |
+| Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint) |
 
 Spans are batched rather than exported one at a time. A span is therefore visible in the backend up to `scheduledDelayMillis` after it ends, and a process that exits without calling [`stopTracing`](usage.md#shutdown) drops whatever is still queued.
+
+## Metrics
+
+The instrumentations record their measurements against whichever meter provider is registered when `registerInstrumentations` runs. The HTTP and undici instrumentations record request duration histograms, and the AWS SDK instrumentation records Bedrock token usage and operation duration. Where no meter provider is registered, those instruments come from the no-op meter and every measurement is discarded.
+
+`setupTracing` registers a `MeterProvider` and passes it to `registerInstrumentations`, which is what turns those measurements into exported metrics. `RuntimeNodeInstrumentation` is registered alongside them for the metrics no span can carry: event loop delay and utilisation, garbage collection duration, and heap occupancy.
+
+Recording happens outside the sampler. The HTTP instrumentation records the duration after the span ends, without consulting the sampling decision, so metrics describe every request while traces describe a sampled subset.
+
+The resource is built once and passed to both providers. Grafana pairs a metric with a trace on `service.name`, which requires the two to be identical.
 
 ## Resource attributes
 
@@ -63,7 +81,7 @@ Only outgoing requests carry `host`, so the HTTP hook returns without setting an
 
 The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider, so repeated initialisation cannot register a second set of instrumentations or a second exporter against the same process.
 
-`stopTracing` awaits the provider shutdown, which flushes queued spans, then clears the module scope reference. A later `setupTracing` call therefore builds a fresh pipeline.
+`stopTracing` awaits the tracer provider shutdown, which flushes queued spans, then the meter provider shutdown, which flushes a final metric export. It clears both module scope references and unregisters the global meter provider, since the API refuses a second registration while one is in place. A later `setupTracing` call therefore builds a fresh pipeline.
 
 ## Diagnostics
 

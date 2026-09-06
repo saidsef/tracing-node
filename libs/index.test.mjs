@@ -1,6 +1,8 @@
 // index.test.mjs
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { metrics } from '@opentelemetry/api';
+import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import { setupTracing, stopTracing, __resetTracingForTesting } from './index.mjs';
 
 describe('setupTracing', () => {
@@ -71,5 +73,53 @@ describe('setupTracing', () => {
       enableDnsInstrumentation: true,
     });
     assert.ok(tracer, 'tracer should be defined');
+  });
+
+  // The http and undici instrumentations record their duration histograms
+  // whether or not a meter provider exists. Without one the API hands them the
+  // no-op meter and every measurement is dropped.
+  it('should register a global meter provider by default', () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    assert.ok(metrics.getMeterProvider() instanceof MeterProvider, 'global meter provider should be the SDK one');
+  });
+
+  it('should leave the no-op meter provider in place when metrics are disabled', () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+      enableMetrics: false,
+    });
+    assert.ok(!(metrics.getMeterProvider() instanceof MeterProvider), 'no meter provider should be registered');
+  });
+
+  it('should accept a separate metrics endpoint', () => {
+    const tracer = setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+      metricsUrl: 'http://localhost:4318',
+    });
+    assert.ok(tracer, 'tracer should be defined');
+    assert.ok(metrics.getMeterProvider() instanceof MeterProvider, 'global meter provider should be the SDK one');
+  });
+
+  // Without the unregister in stopTracing the API refuses the second
+  // registration and the global keeps pointing at the shut-down provider.
+  it('should unregister the meter provider on shutdown', async () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    await stopTracing();
+    assert.ok(!(metrics.getMeterProvider() instanceof MeterProvider), 'meter provider should be unregistered');
+
+    __resetTracingForTesting();
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    assert.ok(metrics.getMeterProvider() instanceof MeterProvider, 'a later setup should register again');
   });
 });
