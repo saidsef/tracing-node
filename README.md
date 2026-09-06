@@ -21,6 +21,7 @@ Effortlessly supercharge your applications with world-class distributed tracing!
 | IORedis client | Cache instrumentation |
 | AWS SDK | Cloud service instrumentation |
 | Pino logger | Integration with trace/span IDs |
+| Log export | Pino records over OTLP, correlated by trace |
 | DNS/FS instrumentation | Optional monitoring |
 | Resource detection | Host, OS, process, container |
 | W3C Trace Context | Standard propagation |
@@ -42,6 +43,8 @@ setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 ```
 
 The W3C Trace Context propagation this library registers is what lets Tempo pair a caller's client span with the callee's server span, which is what a service graph is built from.
+
+Pino log records go to the same endpoint and land in Loki, each carrying the trace and span id of the request that wrote it. No log agent or file scraping sits in between.
 
 ## Instalation
 
@@ -79,6 +82,8 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 | url | string | tracing endpoint i.e. `<schema>://<host>:<port>` | Yes | `n/a` |
 | enableFsInstrumentation | boolean | enable FS instrumentation | No | `false` |
 | enableDnsInstrumentation | boolean | enable DNS instrumentation | No | `false`  |
+| enableLogs | boolean | send Pino log records over OTLP | No | `true` |
+| logsUrl | string | logs endpoint, when it differs from `url` | No | `url` |
 
 ## Documentation
 

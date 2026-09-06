@@ -64,6 +64,17 @@ The instrumentation injects `trace_id`, `span_id` and `trace_flags` into every l
 
 Correlating logs with traces in Grafana relies on those ids being in the log record.
 
+It also sends a copy of each record to the OpenTelemetry logs API, which `setupTracing` exports over OTLP unless `enableLogs` is `false`. The application's own stream still receives every record, so container logs are unchanged and the export is an addition to them.
+
+| Field | Source |
+|-------|--------|
+| Severity | The Pino level, mapped onto the OpenTelemetry severity numbers |
+| Timestamp | The record `time`, converted according to the logger's timestamp function |
+| Body | The record message |
+| Trace context | The active span, so a record written inside a request carries its trace |
+
+A record is sent through `pino.multistream`, which needs Pino 7 or later. Log sending is skipped on an older version.
+
 ## AWS SDK
 
 | Setting | Value |

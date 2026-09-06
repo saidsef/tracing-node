@@ -33,6 +33,8 @@
   "homepage": "https://github.com/saidsef/tracing-node#readme",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.222.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.222.0",
     "@opentelemetry/instrumentation": "^0.222.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.77.0",
@@ -45,6 +47,7 @@
     "@opentelemetry/instrumentation-pino": "^0.68.0",
     "@opentelemetry/instrumentation-undici": "^0.32.0",
     "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",

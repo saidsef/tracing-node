@@ -22,12 +22,15 @@ import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
+import {logs} from '@opentelemetry/api-logs';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
+import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-grpc';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
 import {UndiciInstrumentation} from '@opentelemetry/instrumentation-undici';
 import {IORedisInstrumentation} from '@opentelemetry/instrumentation-ioredis';
 import {registerInstrumentations} from '@opentelemetry/instrumentation';
+import {BatchLogRecordProcessor, LoggerProvider} from '@opentelemetry/sdk-logs';
 import {FsInstrumentation} from '@opentelemetry/instrumentation-fs';
 import {resourceFromAttributes, detectResources, envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector} from '@opentelemetry/resources';
 import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
@@ -67,6 +70,7 @@ const setPeerService = (span, host) => {
 };
 
 let tracerProvider = null; // Declare provider in module scope for access in stopTracing
+let loggerProvider = null;
 
 /**
 * Sets up tracing for the application using OpenTelemetry.
@@ -84,6 +88,8 @@ let tracerProvider = null; // Declare provider in module scope for access in sto
 * @param {number} [options.concurrencyLimit=10] - The concurrency limit for the exporter.
 * @param {boolean} [options.enableFsInstrumentation=false] - Enable file system instrumentation.
 * @param {boolean} [options.enableDnsInstrumentation=false] - Enable DNS instrumentation.
+* @param {boolean} [options.enableLogs=true] - Send Pino log records over OTLP.
+* @param {string} [options.logsUrl=options.url] - Endpoint for logs, when it differs from the trace endpoint.
 *
 * @returns {Tracer} - The tracer for the service.
 */
@@ -101,6 +107,8 @@ export function setupTracing(options = {}) {
     concurrencyLimit = 10,
     enableFsInstrumentation = false,
     enableDnsInstrumentation = false,
+    enableLogs = true,
+    logsUrl = url,
   } = options;
 
   // Validate required parameters
@@ -135,12 +143,32 @@ export function setupTracing(options = {}) {
     explicitAttributes[ATTR_CONTAINER_NAME] = hostname;
   }
 
+  // One resource for both signals. Grafana pairs a log line with a trace on
+  // service.name, so the two providers have to carry an identical resource.
+  const resource = detectResources({
+    detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
+  }).merge(resourceFromAttributes(explicitAttributes));
+
   tracerProvider = new NodeTracerProvider({
     spanProcessors: [spanProcessor],
-    resource: detectResources({
-      detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
-    }).merge(resourceFromAttributes(explicitAttributes)),
+    resource,
   });
+
+  if (enableLogs) {
+    loggerProvider = new LoggerProvider({
+      resource,
+      processors: [
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({...exportOptions, url: logsUrl}),
+          maxQueueSize: 4096,
+          maxExportBatchSize: 1024,
+          scheduledDelayMillis: 2000,
+          exportTimeoutMillis: 10000,
+        }),
+      ],
+    });
+    logs.setGlobalLoggerProvider(loggerProvider);
+  }
 
   // Register globally. With no overrides, register() installs the modern
   // AsyncLocalStorageContextManager and a CompositePropagator of
@@ -214,6 +242,10 @@ export function setupTracing(options = {}) {
       },
     }),
     new PinoInstrumentation({
+      // Log sending is on by default, and every record is parsed and rebuilt as
+      // a LogRecord before it reaches a logger. With no logger provider that
+      // work is done for a no-op, so turn it off rather than pay for nothing.
+      disableLogSending: !enableLogs,
       logHook: (span, record) => {
         // trace_id/span_id/trace_flags are injected by the instrumentation by
         // default; only add service name for better log correlation.
@@ -292,6 +324,7 @@ export function setupTracing(options = {}) {
   // Register instrumentations
   registerInstrumentations({
     tracerProvider,
+    loggerProvider,
     instrumentations,
   });
 
@@ -300,11 +333,11 @@ export function setupTracing(options = {}) {
 }
 
 /**
-* Gracefully stops the tracing by shutting down the tracer provider.
+* Gracefully stops the tracing by shutting down the tracer and logger providers.
 *
-* This function ensures that all pending spans are exported and resources are
-* cleaned up properly. It is recommended to call this function during the
-* application's shutdown process.
+* This function ensures that all pending spans and log records are exported and
+* resources are cleaned up properly. It is recommended to call this function
+* during the application's shutdown process.
 *
 * @returns {Promise<void>} - A promise that resolves when shutdown is complete.
 */
@@ -320,6 +353,22 @@ export async function stopTracing() {
   } else {
     diag.warn('Tracer provider is not initialized.');
   }
+
+  // Separate from the trace shutdown, so a failing exporter on one signal
+  // still lets the other flush.
+  if (loggerProvider) {
+    try {
+      await loggerProvider.shutdown();
+      diag.info('Logs have been successfully shut down.');
+    } catch (error) {
+      diag.error('Error during logs shutdown:', error);
+    } finally {
+      // A second setGlobalLoggerProvider is ignored, so unregister whatever the
+      // flush did, or a later setupTracing keeps writing to a dead provider.
+      loggerProvider = null;
+      logs.disable();
+    }
+  }
 }
 
 /**
@@ -329,4 +378,5 @@ export async function stopTracing() {
  */
 export function __resetTracingForTesting() {
   tracerProvider = null;
+  loggerProvider = null;
 }

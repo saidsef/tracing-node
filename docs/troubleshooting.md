@@ -25,6 +25,17 @@ Instrumentation patches a module as it loads. A library imported before `setupTr
 
 `globalThis.fetch` runs on undici rather than the `http` module. The undici instrumentation covers it and is always registered, so a missing fetch span points at the initialisation order rather than at configuration.
 
+## No logs reach the collector
+
+| Cause | Check | Fix |
+|-------|-------|-----|
+| Log export disabled | Whether `enableLogs` is `false` | Leave it unset, since it defaults to `true` |
+| Endpoint takes traces alone | Exporter errors naming the logs service on stdout | Point `logsUrl` at a receiver that accepts logs, such as an OpenTelemetry Collector or Grafana Alloy |
+| The application does not use Pino | Which logger writes the records | Log export covers Pino alone |
+| Pino older than 7 | The installed Pino version | Log sending needs `pino.multistream`, added in Pino 7 |
+
+Records still reach the application's own stream in every one of these cases, so logs missing from the backend while present in the container output point here rather than at the logger.
+
 ## The trace stops at a service boundary
 
 A callee starting a new trace instead of continuing the caller's one means the `traceparent` header was not propagated. Check that the outgoing call goes through an instrumented client, and that no proxy in between strips the header.
