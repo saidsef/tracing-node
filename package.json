@@ -6,7 +6,9 @@
   "scripts": {
     "test": "node --trace-warnings --test --report-uncaught-exception libs/index.test.mjs",
     "lint": "eslint .",
-    "rebuild": "rm -rfv node_modules/ package-lock.json && npm install --prod --omit=dev"
+    "rebuild": "rm -rfv node_modules/ package-lock.json && npm install --prod --omit=dev",
+    "build-docs": "podman run --rm -v .:/docs docker.io/squidfunk/mkdocs-material:9 build",
+    "clean-docs": "rm -rf site"
   },
   "type": "module",
   "private": false,
@@ -50,6 +52,14 @@
   },
   "devDependencies": {
     "eslint": "^10.8.0"
+  },
+  "docs": {
+    "pip": [
+      "mkdocs>=1.6",
+      "mkdocs-material>=9.5",
+      "pymdown-extensions>=10.7",
+      "pygments>=2.18"
+    ]
   },
   "overrides": {
     "protobufjs": "^7.5.3",

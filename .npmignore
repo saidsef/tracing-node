@@ -2,3 +2,7 @@
 .devcontainer/
 test/
 node_modules/
+docs/
+site/
+mkdocs.yml
+.readthedocs.yaml
