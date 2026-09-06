@@ -1,32 +1,18 @@
-# Opentelemetry Wrapper for Tracing Node Applications 
+# OpenTelemetry Wrapper for Tracing Node Applications
 
-[![CI](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml/badge.svg)](#Instalation)
-[![Release](https://github.com/saidsef/tracing-node/actions/workflows/release.yml/badge.svg)](#Instalation)
+[![CI](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml/badge.svg)](https://github.com/saidsef/tracing-node/actions/workflows/pr.yml)
+[![Release](https://github.com/saidsef/tracing-node/actions/workflows/release.yml/badge.svg)](https://github.com/saidsef/tracing-node/actions/workflows/release.yml)
+[![Documentation](https://readthedocs.org/projects/tracing-node/badge/?version=latest)](https://tracing-node.readthedocs.io/en/latest/)
 ![GitHub issues](https://img.shields.io/github/issues/saidsef/tracing-node)
 ![npm](https://img.shields.io/npm/v/%40saidsef%2Ftracing-node) ![npm](https://img.shields.io/npm/dt/%40saidsef/tracing-node)
 ![GitHub release(latest by date)](https://img.shields.io/github/v/release/saidsef/tracing-node)
 ![Commits](https://img.shields.io/github/commits-since/saidsef/tracing-node/latest.svg)
 
-Get telemetry for your app in less than 3 minutes!
+**Traces, metrics and logs from one function call.** Add two lines to a service, and its requests, its calls to Redis, Elasticsearch, AWS and other services, its runtime counters and its Pino log records all arrive at your collector, already correlated by trace id and stitched into a service graph.
 
-Effortlessly supercharge your applications with world-class distributed tracing! This OpenTelemetry wrapper delivers seamless, lightning-fast observability, empowering developers to monitor, debug, and optimise microservices with ease. Designed for modern cloud-native environments, it's the smart choice for engineers who demand reliability, scalability, and actionable insights. Get started in minutes and unlock the full potential of your service architecture—no fuss, just results.  This is to make instrumentation (more) idempotent.
+`@saidsef/tracing-node` wraps the OpenTelemetry Node SDK. One call to `setupTracing` builds the tracer, meter and logger providers, registers them globally, and turns on a fixed set of instrumentations, so an application gets all three signals without assembling exporters, span processors, resource detectors and instrumentation packages itself. A second call logs a warning and returns the tracer that already exists, which makes initialisation idempotent.
 
-## Features
-| Feature | Description |
-|---------|-------------|
-| HTTP/HTTPS instrumentation | Automatic service detection |
-| fetch/undici instrumentation | Outgoing `globalThis.fetch` calls |
-| Express.js support | Framework instrumentation |
-| Elasticsearch client | Database instrumentation |
-| IORedis client | Cache instrumentation |
-| AWS SDK | Cloud service instrumentation |
-| Pino logger | Integration with trace/span IDs |
-| Node runtime metrics | Event loop, garbage collection, heap |
-| Log export | Pino records over OTLP, correlated by trace |
-| RED metrics | Request duration histograms over OTLP |
-| DNS/FS instrumentation | Optional monitoring |
-| Resource detection | Host, OS, process, container |
-| W3C Trace Context | Standard propagation |
+Full documentation: [tracing-node.readthedocs.io](https://tracing-node.readthedocs.io/).
 
 ## Prerequisites
 - NodeJS
@@ -34,87 +20,42 @@ Effortlessly supercharge your applications with world-class distributed tracing!
 - ...
 - Profit?
 
-## Where the traces go
+## Installation
 
-`setupTracing` exports OTLP over gRPC, so any OpenTelemetry-compatible collector or backend will take it - point `url` at yours.
-
-If you do not have one yet, [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) is a companion project that deploys the full LGTM+ stack - Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla - to Kubernetes with `kubectl apply -k ./deployment`, broken into small composable manifests rather than a single opaque chart. Send traces to its Alloy OTLP receiver and they land in Tempo, with the metrics-generator turning them into RED and service-graph metrics in Mimir:
-
-```javascript
-setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
-```
-
-The W3C Trace Context propagation this library registers is what lets Tempo pair a caller's client span with the callee's server span, which is what a service graph is built from.
-
-Metrics go to the same endpoint by default and land in Mimir. They are recorded before the sampler runs, so they stay complete however far trace volume is turned down.
-
-Pino log records go to the same endpoint and land in Loki, each carrying the trace and span id of the request that wrote it. No log agent or file scraping sits in between.
-
-## Instalation
-
-```
+```shell
 npm install @saidsef/tracing-node --save
 ```
+
+## Usage
+
+```javascript
+import { setupTracing } from '@saidsef/tracing-node';
+
+setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
+```
+
+`serviceName` and `url` are required, and both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables. `setupTracing` has to run before the application imports the libraries being traced.
+
+## Documentation
+
+The pages below are the manual. Their sources are in [`docs/`](./docs), and `npm run build-docs` renders the site into `site/`.
+
+| Page | Contents |
+|------|----------|
+| [Overview](https://tracing-node.readthedocs.io/en/latest/) | What the library does, the feature set and the requirements |
+| [Architecture](https://tracing-node.readthedocs.io/en/latest/architecture/) | The pipeline `setupTracing` builds, and how the service graph is fed |
+| [Configuration](https://tracing-node.readthedocs.io/en/latest/usage/) | Every option, the environment variables, initialisation order and shutdown |
+| [Instrumentation](https://tracing-node.readthedocs.io/en/latest/instrumentation/) | Each instrumentation, and the attributes it emits |
+| [Deployment](https://tracing-node.readthedocs.io/en/latest/deployment/) | Running instrumented services in containers and Kubernetes |
+| [Testing](https://tracing-node.readthedocs.io/en/latest/testing/) | The unit tests and the end to end harness |
+| [Troubleshooting](https://tracing-node.readthedocs.io/en/latest/troubleshooting/) | Symptoms, causes and fixes |
 
 ## Upgrading
 
 Breaking changes and the attribute renames they bring are recorded in the [release notes](https://github.com/saidsef/tracing-node/releases) for the version concerned.
 
-## Usage
-
-You can set required params via env variables or function:
-
-Env vars:
-| Environment Variable   | Description                | Required |
-|-----------------------|----------------------------| --------- |
-| CONTAINER_NAME/HOSTNAME| Container or pod hostname  | No |
-| ENDPOINT              | Tracing collector endpoint | Yes |
-| SERVICE_NAME          | Service/application name   | Yes |
-
-Function args
-```
-import { setupTracing } from '@saidsef/tracing-node';
-setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
-```
-
-### Required Parameters are
-
-| Name | Type | Description| Required | Default |
-|----- | ---- | ------------- | ----- | ---- |
-| hostname | string | container / pod hostname | No | `hostname` |
-| serviceName | string | service / application name | Yes | `n/a` |
-| url | string | tracing endpoint i.e. `<schema>://<host>:<port>` | Yes | `n/a` |
-| enableFsInstrumentation | boolean | enable FS instrumentation | No | `false` |
-| enableDnsInstrumentation | boolean | enable DNS instrumentation | No | `false`  |
-| enableMetrics | boolean | export metrics as well as traces | No | `true` |
-| metricsUrl | string | metrics endpoint, when it differs from `url` | No | `url` |
-| metricExportIntervalMillis | number | how often metrics are exported | No | `60000` |
-| enableLogs | boolean | send Pino log records over OTLP | No | `true` |
-| logsUrl | string | logs endpoint, when it differs from `url` | No | `url` |
-
-## Documentation
-
-Full documentation is in the [`docs/`](./docs) directory and built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
-
-Live docs: [tracing-node.readthedocs.io](https://tracing-node.readthedocs.io/)
-
-| Page | Contents |
-|------|----------|
-| [Architecture](./docs/architecture.md) | The pipeline `setupTracing` builds, and how the service graph is fed |
-| [Configuration](./docs/usage.md) | Options, environment variables, initialisation order and shutdown |
-| [Instrumentation](./docs/instrumentation.md) | Each instrumentation, and the attributes it emits |
-| [Deployment](./docs/deployment.md) | Running instrumented services in containers and Kubernetes |
-| [Testing](./docs/testing.md) | The unit tests and the end to end harness |
-| [Troubleshooting](./docs/troubleshooting.md) | Symptoms, causes and fixes |
-
-Build them locally with `npm run build-docs`, which renders the site into `site/`.
-
-## Source
+## Contributing
 
 Our latest and greatest source of `tracing-node` can be found on [GitHub](https://github.com/saidsef/tracing-node/fork). Fork us!
 
-## Contributing
-
-We would :heart: you to contribute by making a [pull request](https://github.com/saidsef/tracing-node/pulls).
-
-Please read the official [Contribution Guide](./CONTRIBUTING.md) for more information on how you can contribute.
+We would :heart: you to contribute by making a [pull request](https://github.com/saidsef/tracing-node/pulls). Please read the official [Contribution Guide](./CONTRIBUTING.md) for more information on how you can contribute.
