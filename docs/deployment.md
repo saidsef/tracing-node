@@ -65,14 +65,7 @@ The exporter speaks OTLP over gRPC, so `ENDPOINT` is the gRPC receiver of a coll
 
 [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) deploys the LGTM+ stack to Kubernetes with `kubectl apply -k ./deployment`, as small composable manifests rather than one chart. Traces sent to its Alloy OTLP receiver land in Tempo, and the metrics generator turns them into RED and service graph metrics in Mimir.
 
-A service graph edge needs two things, both of which the library provides:
-
-| Requirement | Provided by |
-|-------------|-------------|
-| A caller client span paired with a callee server span | W3C Trace Context propagation, registered on every HTTP and fetch call |
-| A name for the node at the far end | The `peer.service` attribute, set in the request hooks |
-
-[Architecture](architecture.md#service-graph-attributes) covers how `peer.service` is derived.
+A service graph edge needs a caller client span paired with a callee server span, plus a name for the node at the far end. The library provides both. [Architecture](architecture.md#service-graph-attributes) covers the trace context propagation and the `peer.service` attribute behind them.
 
 ## In-cluster smoke test
 

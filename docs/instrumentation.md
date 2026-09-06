@@ -10,8 +10,6 @@ Several instrumentations record metrics as well as spans. Those measurements rea
 | `http.client.request.duration` | HTTP, Undici |
 | `gen_ai.client.token.usage`, `gen_ai.client.operation.duration` | AWS SDK, for Bedrock calls |
 
-The Pino instrumentation sends log records over the same pipeline, which `setupTracing` exports unless `enableLogs` is `false`.
-
 | Instrumentation | Package | Enabled |
 |-----------------|---------|---------|
 | HTTP | `@opentelemetry/instrumentation-http` | Always |

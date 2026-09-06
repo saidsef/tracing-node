@@ -90,13 +90,13 @@ Aggregation temporality is cumulative, which is what Prometheus and Mimir expect
 
 The export interval is 60 seconds. A shorter interval raises resolution and the volume written to the backend in equal measure.
 
-Metric recording sits outside the sampler. A request is counted in `http.server.request.duration` whether or not its span is sampled, so `OTEL_TRACES_SAMPLER` can be turned down without the metrics losing accuracy.
+Sampling does not reach the metrics, so `OTEL_TRACES_SAMPLER` can be turned down without losing accuracy. [Metrics](architecture.md#metrics) covers why.
 
 ## Logs
 
 Pino log records are exported by default, over OTLP gRPC, to the same endpoint as traces. Each record carries the trace id and span id of the request that wrote it, which is what links a log line to its trace in Grafana. The application keeps writing to its own stream, so container logs are unchanged.
 
-The Pino instrumentation sends records to the OpenTelemetry logs API whether or not a logger provider is registered. Where no provider exists, each record is still parsed and rebuilt before being handed to a no-op logger. Setting `enableLogs` to `false` disables log sending at the instrumentation, so that work is not done at all.
+Setting `enableLogs` to `false` disables log sending at the instrumentation, rather than leaving each record to be built and then discarded. [Logs](architecture.md#logs) covers that path.
 
 Point `logsUrl` elsewhere where the trace endpoint does not accept logs.
 
@@ -104,9 +104,7 @@ Log export covers Pino alone. An application logging through anything else is un
 
 ## Optional instrumentations
 
-`FsInstrumentation` patches the `fs` module on construction, so it is constructed only when `enableFsInstrumentation` is set. File system tracing produces a large number of spans and is worth enabling only while investigating file access.
-
-`DnsInstrumentation` is constructed only when `enableDnsInstrumentation` is set, and it ignores `localhost`, `127.0.0.1` and `::1`.
+`enableFsInstrumentation` and `enableDnsInstrumentation` are off by default. Both instrumentations patch on construction, so each is constructed only when its option is set. File system tracing in particular produces a large number of spans and is worth enabling only while investigating file access. [Instrumentation](instrumentation.md#file-system) covers what each emits.
 
 ## Using the returned tracer
 
