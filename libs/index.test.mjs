@@ -5,7 +5,7 @@ import { metrics } from '@opentelemetry/api';
 import { logs } from '@opentelemetry/api-logs';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import { LoggerProvider } from '@opentelemetry/sdk-logs';
-import { setupTracing, stopTracing, __resetTracingForTesting } from './index.mjs';
+import { setupTracing, stopTracing, __resetTracingForTesting, __expressRequestHookForTesting } from './index.mjs';
 
 describe('setupTracing', () => {
   // Clear environment and reset tracing state before each test
@@ -170,5 +170,95 @@ describe('setupTracing', () => {
       url: 'http://localhost:4317',
     });
     assert.ok(metrics.getMeterProvider() instanceof MeterProvider, 'a later setup should register again');
+  });
+});
+
+// The instrumentation calls the hook once per layer span, so the cheap path
+// through it matters as much as what it records.
+describe('express request hook', () => {
+  const fakeSpan = () => {
+    const attributes = {};
+    return {
+      attributes,
+      names: [],
+      setAttribute(key, value) {
+        attributes[key] = value;
+      },
+      updateName(name) {
+        this.names.push(name);
+      },
+    };
+  };
+
+  const requestHandler = (request, route = '/work/:id') => ({
+    request,
+    route,
+    layerType: 'request_handler',
+  });
+
+  it('should record route and params on a request handler layer', () => {
+    const span = fakeSpan();
+    __expressRequestHookForTesting(span, requestHandler({
+      method: 'GET',
+      params: {id: '42'},
+      query: {},
+    }));
+    assert.strictEqual(span.attributes['express.route'], '/work/:id');
+    assert.strictEqual(span.attributes['express.params'], '{"id":"42"}');
+  });
+
+  it('should ignore middleware and router layers', () => {
+    for (const layerType of ['middleware', 'router']) {
+      const span = fakeSpan();
+      __expressRequestHookForTesting(span, {
+        request: {method: 'GET', params: {id: '42'}, query: {page: '1'}},
+        route: '/work/:id',
+        layerType,
+      });
+      assert.deepStrictEqual(span.attributes, {}, `${layerType} layer should record nothing`);
+    }
+  });
+
+  // The HTTP instrumentation renames the server span from http.route already.
+  // Renaming here would relabel every middleware span with the same string.
+  it('should not rename the span', () => {
+    const span = fakeSpan();
+    __expressRequestHookForTesting(span, requestHandler({
+      method: 'GET',
+      params: {id: '42'},
+      query: {},
+    }));
+    assert.deepStrictEqual(span.names, [], 'the hook should not rename a span');
+  });
+
+  // A query string carries tokens and personal data, and the span attribute
+  // value length limit is unbounded by default.
+  it('should record query key names without their values', () => {
+    const span = fakeSpan();
+    __expressRequestHookForTesting(span, requestHandler({
+      method: 'GET',
+      params: {},
+      query: {token: 'sensitive-value', page: '2'},
+    }));
+    assert.deepStrictEqual(span.attributes['express.query_keys'], ['page', 'token']);
+    assert.strictEqual(span.attributes['express.query'], undefined, 'query values should not be recorded');
+    assert.ok(!JSON.stringify(span.attributes).includes('sensitive-value'), 'no query value should reach the span');
+  });
+
+  it('should record the user id when the application sets one', () => {
+    const span = fakeSpan();
+    __expressRequestHookForTesting(span, requestHandler({
+      method: 'GET',
+      params: {},
+      query: {},
+      user: {id: 'user-7'},
+    }));
+    assert.strictEqual(span.attributes['user.id'], 'user-7');
+  });
+
+  it('should tolerate a layer with no request', () => {
+    const span = fakeSpan();
+    assert.doesNotThrow(() => __expressRequestHookForTesting(span, {layerType: 'request_handler'}));
+    assert.deepStrictEqual(span.attributes, {});
   });
 });

@@ -56,14 +56,18 @@ The request hook reads `getHeaders()` on an outgoing `ClientRequest` and `.heade
 
 ## Express
 
+The instrumentation creates a span per layer, covering every middleware, every router and the request handler, and it calls the request hook on each one. The hook records attributes on the request handler layer alone, which is the layer carrying the matched route. Middleware and router spans keep the names the instrumentation gives them, such as `middleware - expressInit` and `router - /work`, which is what shows where time inside a request went.
+
 | Attribute | Source |
 |-----------|--------|
 | `express.route` | The matched route, when there is one |
 | `express.params` | Route parameters, JSON encoded, when the object is not empty |
-| `express.query` | Query string parameters, JSON encoded, when the object is not empty |
+| `express.query_keys` | The names of the query string parameters, sorted |
 | `user.id` | `request.user.id`, when the application sets one |
 
-A span with a matched route and a request method is renamed to `METHOD /route`, for example `GET /work/:id`. Naming by route rather than by path keeps the cardinality of span names bounded when the path carries an id.
+Query values are not recorded. A query string carries access tokens and personal data, and `OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT` is unbounded by default, so a value written to a span attribute is exported in full. The key names describe the shape of a request without exporting its contents.
+
+The server span is named `METHOD /route`, for example `GET /work/:id`. That naming comes from the HTTP instrumentation, which reads `http.route` as the response finishes, and the Express instrumentation supplies the route it reads.
 
 ## Connect
 
