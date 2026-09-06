@@ -12,7 +12,7 @@ spec:
   preemptionPolicy: PreemptLowerPriority
   containers:
   - name: tracing-node
-    image: docker.io/node:20-alpine3.19
+    image: docker.io/node:24-alpine
     workingDir: "/app"
     command:
       - /bin/sh

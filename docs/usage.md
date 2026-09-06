@@ -6,7 +6,7 @@
 npm install @saidsef/tracing-node --save
 ```
 
-The package is ESM only and declares `"type": "module"`. Node 20.6.0 or later is required.
+The package is ESM only and declares `"type": "module"`. Node 24.0.0 or later is required.
 
 ## Initialisation order
 

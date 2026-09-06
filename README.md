@@ -15,7 +15,7 @@
 Full documentation: [tracing-node.readthedocs.io](https://tracing-node.readthedocs.io/).
 
 ## Prerequisites
-- NodeJS
+- NodeJS >= 24.0.0
 - Observability
 - ...
 - Profit?

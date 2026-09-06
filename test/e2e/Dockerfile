@@ -1,6 +1,6 @@
 # Build context = repo root:
 #   docker build -t tracing-e2e-demo:local -f test/e2e/Dockerfile .
-FROM node:22-slim
+FROM node:24-slim
 
 WORKDIR /app
 
