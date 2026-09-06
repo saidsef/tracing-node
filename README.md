@@ -80,6 +80,23 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 | enableFsInstrumentation | boolean | enable FS instrumentation | No | `false` |
 | enableDnsInstrumentation | boolean | enable DNS instrumentation | No | `false`  |
 
+## Documentation
+
+Full documentation is in the [`docs/`](./docs) directory and built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
+
+Live docs: [tracing-node.readthedocs.io](https://tracing-node.readthedocs.io/)
+
+| Page | Contents |
+|------|----------|
+| [Architecture](./docs/architecture.md) | The pipeline `setupTracing` builds, and how the service graph is fed |
+| [Configuration](./docs/usage.md) | Options, environment variables, initialisation order and shutdown |
+| [Instrumentation](./docs/instrumentation.md) | Each instrumentation, and the attributes it emits |
+| [Deployment](./docs/deployment.md) | Running instrumented services in containers and Kubernetes |
+| [Testing](./docs/testing.md) | The unit tests and the end to end harness |
+| [Troubleshooting](./docs/troubleshooting.md) | Symptoms, causes and fixes |
+
+Build them locally with `npm run build-docs`, which renders the site into `site/`.
+
 ## Source
 
 Our latest and greatest source of `tracing-node` can be found on [GitHub](https://github.com/saidsef/tracing-node/fork). Fork us!
