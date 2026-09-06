@@ -16,12 +16,16 @@ The suite runs on the Node test runner against `libs/index.test.mjs`, with `--tr
 | `hostname` given | Accepted and recorded |
 | Global fetch | Instrumented by the undici instrumentation |
 | Optional instrumentations | `enableFsInstrumentation` and `enableDnsInstrumentation` accepted |
+| Metrics enabled | A meter provider is registered globally |
+| `enableMetrics: false` | No meter provider is registered |
+| `metricsUrl` given | Accepted, and the provider is still registered |
+| Meter shutdown | The meter provider is unregistered, so a later setup registers again |
 | Logs enabled | A logger provider is registered globally |
 | `enableLogs: false` | No logger provider is registered |
 | `logsUrl` given | Accepted, and the provider is still registered |
-| Shutdown | The logger provider is unregistered, so a later setup registers again |
+| Logger shutdown | The logger provider is unregistered, so a later setup registers again |
 
-The provider lives in module scope, so tests reset it between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
+The providers live in module scope, so tests reset them between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
 
 ## Linting
 
