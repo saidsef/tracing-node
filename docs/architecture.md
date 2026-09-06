@@ -29,7 +29,7 @@ flowchart LR
 | Provider | `NodeTracerProvider` | Resource from detectors, merged with the explicit service and container attributes |
 | Processor | `BatchSpanProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
 | Exporter | `OTLPTraceExporter` | OTLP over gRPC, `timeoutMillis` 10000, `concurrencyLimit` from the options (default 10) |
-| Registration | `tracerProvider.register()` | Installs the async local storage context manager and a composite W3C Trace Context and baggage propagator |
+| Registration | `tracerProvider.register()` | Global tracer provider, context manager and propagators, see [Propagation](#propagation) |
 | Meter provider | `MeterProvider` | Same resource as the tracer provider, registered as the global meter provider |
 | Metric reader | `PeriodicExportingMetricReader` | `exportIntervalMillis` from the options (default 60000) |
 | Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint) |
@@ -37,7 +37,7 @@ flowchart LR
 | Log processor | `BatchLogRecordProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
 | Log exporter | `OTLPLogExporter` | OTLP over gRPC, `logsUrl` from the options (default the trace endpoint) |
 
-Spans are batched rather than exported one at a time. A span is therefore visible in the backend up to `scheduledDelayMillis` after it ends, and a process that exits without calling [`stopTracing`](usage.md#shutdown) drops whatever is still queued.
+Spans are batched rather than exported one at a time, so a span is visible in the backend up to `scheduledDelayMillis` after it ends. [Shutdown](usage.md#shutdown) covers the flush a process needs before it exits.
 
 ## Metrics
 
@@ -97,7 +97,7 @@ Only outgoing requests carry `host`, so the HTTP hook returns without setting an
 
 The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider, so repeated initialisation cannot register a second set of instrumentations or a second exporter against the same process.
 
-`stopTracing` awaits the tracer provider shutdown, which flushes queued spans, then the meter provider shutdown, which flushes a final metric export, then the logger provider shutdown, which flushes queued log records. It clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call therefore builds a fresh pipeline.
+`stopTracing` shuts each provider down in turn, then clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call therefore builds a fresh pipeline. [Shutdown](usage.md#shutdown) covers what each step flushes.
 
 ## Diagnostics
 

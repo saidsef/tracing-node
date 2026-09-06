@@ -47,7 +47,7 @@ setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 
 The exporter speaks OTLP over gRPC, so any OpenTelemetry-compatible collector or backend accepts them. Point `url` at yours.
 
-[grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) is a companion project that deploys the LGTM+ stack - Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla - to Kubernetes. Traces sent to its Alloy OTLP receiver land in Tempo, and the metrics generator turns them into RED and service graph metrics in Mimir. [Deployment](deployment.md) has the environment variables and manifests.
+[grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) is a companion project that deploys the LGTM+ stack - Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla - to Kubernetes. [Deployment](deployment.md) covers pointing a service at its Alloy receiver, with the environment variables and manifests.
 
 ## Documentation
 
