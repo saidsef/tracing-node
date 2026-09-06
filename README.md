@@ -36,6 +36,19 @@ setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'
 
 `serviceName` and `url` are required, and both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables. `setupTracing` has to run before the application imports the libraries being traced.
 
+## Collector and backend
+
+The exporter speaks OTLP over gRPC, so any OpenTelemetry-compatible collector accepts all three signals. Point `url` at yours.
+
+[**grafana-loki-on-k8s**](https://github.com/saidsef/grafana-loki-on-k8s) is the companion stack, and the one the end to end harness in [`test/e2e/`](./test/e2e) targets. It deploys Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla to Kubernetes as small composable manifests.
+
+```shell
+git clone https://github.com/saidsef/grafana-loki-on-k8s
+kubectl apply -k grafana-loki-on-k8s/deployment
+```
+
+Traces sent to its Alloy OTLP receiver on port 4317 land in Tempo, log records in Loki and metrics in Mimir. Tempo's metrics generator turns the spans into RED and service graph metrics, which is what the `peer.service` attribute this library sets exists to feed.
+
 ## Documentation
 
 The pages below are the manual. Their sources are in [`docs/`](./docs), and `npm run build-docs` renders the site into `site/`.
