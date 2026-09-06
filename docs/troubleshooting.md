@@ -47,6 +47,10 @@ A second `setupTracing` call logs this warning and returns the tracer from the e
 
 They should not. Incoming requests to paths starting with `/metrics` or `/healthz` are ignored. A probe on any other path produces a span, so either move the probe or expect it in the trace store.
 
+## Express spans all share one name
+
+They should not. The request hook records on the request handler layer alone and never renames a span, so middleware and router spans keep the names the instrumentation gives them. The server span is named `METHOD /route` by the HTTP instrumentation, and that one name for the whole request is expected.
+
 ## Too many spans
 
 File system instrumentation is off by default because it produces a span per operation. Confirm `enableFsInstrumentation` is not set in production. DNS instrumentation is off by default as well.

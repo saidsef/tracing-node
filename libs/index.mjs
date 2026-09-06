@@ -21,7 +21,7 @@ import {diag, DiagConsoleLogger, DiagLogLevel} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
-import {ExpressInstrumentation} from '@opentelemetry/instrumentation-express';
+import {ExpressInstrumentation, ExpressLayerType} from '@opentelemetry/instrumentation-express';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import {PinoInstrumentation} from '@opentelemetry/instrumentation-pino';
@@ -63,6 +63,32 @@ const setPeerService = (span, host) => {
       span.setAttribute('db.system.name', service);
       return;
     }
+  }
+};
+
+// The express hook runs once per layer span - every middleware, every router,
+// and the request handler. Only the request handler carries the matched route,
+// so the rest return before serialising anything.
+const expressRequestHook = (span, info) => {
+  // info is ExpressRequestInfo: { request, route, layerType }
+  if (info?.layerType !== ExpressLayerType.REQUEST_HANDLER) return;
+
+  const request = info.request;
+  if (info.route) {
+    span.setAttribute('express.route', info.route);
+  }
+  if (request?.params && Object.keys(request.params).length > 0) {
+    span.setAttribute('express.params', JSON.stringify(request.params));
+  }
+  // Names only. Query values carry tokens and personal data, and the span
+  // attribute value length limit defaults to unbounded.
+  const queryKeys = request?.query ? Object.keys(request.query) : [];
+  if (queryKeys.length > 0) {
+    span.setAttribute('express.query_keys', queryKeys.sort());
+  }
+  // Add user context if available
+  if (request?.user?.id) {
+    span.setAttribute('user.id', request.user.id);
   }
 };
 
@@ -192,26 +218,7 @@ export function setupTracing(options = {}) {
       requestHook: (span, request) => setPeerService(span, request?.origin),
     }),
     new ExpressInstrumentation({
-      requestHook: (span, info) => {
-        // info is ExpressRequestInfo: { request, route, layerType }
-        const request = info.request;
-        if (info.route) {
-          span.setAttribute('express.route', info.route);
-          if (request?.method) {
-            span.updateName(`${request.method} ${info.route}`);
-          }
-        }
-        if (request?.params && Object.keys(request.params).length > 0) {
-          span.setAttribute('express.params', JSON.stringify(request.params));
-        }
-        if (request?.query && Object.keys(request.query).length > 0) {
-          span.setAttribute('express.query', JSON.stringify(request.query));
-        }
-        // Add user context if available
-        if (request?.user?.id) {
-          span.setAttribute('user.id', request.user.id);
-        }
-      },
+      requestHook: expressRequestHook,
     }),
     new PinoInstrumentation({
       logHook: (span, record) => {
@@ -321,6 +328,13 @@ export async function stopTracing() {
     diag.warn('Tracer provider is not initialized.');
   }
 }
+
+/**
+ * @internal
+ * The express request hook, exposed so it can be driven without Express.
+ * DO NOT use in production code.
+ */
+export const __expressRequestHookForTesting = expressRequestHook;
 
 /**
  * @internal

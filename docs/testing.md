@@ -17,6 +17,17 @@ The suite runs on the Node test runner against `libs/index.test.mjs`, with `--tr
 | Global fetch | Instrumented by the undici instrumentation |
 | Optional instrumentations | `enableFsInstrumentation` and `enableDnsInstrumentation` accepted |
 
+The express request hook is covered separately, since the instrumentation calls it once per layer span:
+
+| Case | Expectation |
+|------|-------------|
+| Request handler layer | Records the route and the parameters |
+| Middleware and router layers | Records nothing |
+| Any layer | The span is not renamed |
+| Query string present | Key names are recorded and values are not |
+| `request.user.id` set | Recorded as `user.id` |
+| Layer with no request | Returns without throwing |
+
 The provider lives in module scope, so tests reset it between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
 
 ## Linting
