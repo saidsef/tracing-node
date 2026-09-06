@@ -12,28 +12,28 @@ The package is ESM only and declares `"type": "module"`. Node 20.6.0 or later is
 
 Instrumentation works by patching modules as they are loaded, so `setupTracing` has to run before the application requires or imports the libraries being traced. Calling it after Express or IORedis has been loaded leaves those modules unpatched and produces no spans for them.
 
-=== "ESM application"
+### ESM application
 
-    ```javascript
-    import {setupTracing} from '@saidsef/tracing-node';
+```javascript
+import {setupTracing} from '@saidsef/tracing-node';
 
-    setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
+setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 
-    const {default: app} = await import('./app.mjs');
-    ```
+const {default: app} = await import('./app.mjs');
+```
 
-=== "Preload (any application)"
+### Preload
 
-    ```javascript
-    // instrument.mjs
-    import {setupTracing} from '@saidsef/tracing-node';
+```javascript
+// instrument.mjs
+import {setupTracing} from '@saidsef/tracing-node';
 
-    setupTracing();
-    ```
+setupTracing();
+```
 
-    ```shell
-    node --import ./instrument.mjs ./app.cjs
-    ```
+```shell
+node --import ./instrument.mjs ./app.cjs
+```
 
 The preload form is the reliable one. `--import` runs the module to completion before the application entry point loads, and it works for a CommonJS application, where `require-in-the-middle` patches each module on `require`. The [end to end harness](testing.md#end-to-end-harness) uses this form.
 
