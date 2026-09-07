@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -25,7 +25,7 @@
   "author": "Said Sef <saidsef@gmail.com>",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">= 20.6.0"
+    "node": ">= 24.0.0"
   },
   "bugs": {
     "url": "https://github.com/saidsef/tracing-node/issues"

@@ -25,7 +25,7 @@ The instrumentation is idempotent. A second call to `setupTracing` logs a warnin
 
 | Requirement | Value |
 |-------------|-------|
-| Node | >= 20.6.0 |
+| Node | >= 24.0.0 |
 | Module system | ESM (`"type": "module"`), or CJS loaded behind an ESM preload |
 | Collector | Any endpoint accepting OTLP over gRPC |
 

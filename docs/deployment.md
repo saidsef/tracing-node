@@ -7,7 +7,7 @@ The library runs inside the application process, so deploying it means configuri
 Both required values have an environment variable, so an image needs no code change between environments.
 
 ```dockerfile
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /app
 
 COPY package.json package-lock.json ./
