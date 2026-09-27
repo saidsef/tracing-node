@@ -23,7 +23,6 @@ import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
 import {diag, DiagConsoleLogger, DiagLogLevel, metrics} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
-import {ElasticsearchInstrumentation} from 'opentelemetry-instrumentation-elasticsearch';
 import {ExpressInstrumentation, ExpressLayerType} from '@opentelemetry/instrumentation-express';
 import {logs} from '@opentelemetry/api-logs';
 import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
@@ -49,6 +48,21 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 if (esmHookFailure) {
   diag.warn(`ESM loader hook not registered, so ES module imports are not instrumented: ${esmHookFailure.message}`);
 }
+
+// An optional peer dependency: it pins @opentelemetry/core 1.x, which carries a
+// published advisory. Absent, an Elasticsearch call still gets a client span from
+// the http or undici instrumentation. See #576.
+let ElasticsearchInstrumentation = null;
+try {
+  ({ElasticsearchInstrumentation} = await import('opentelemetry-instrumentation-elasticsearch'));
+} catch (error) {
+  // Absence is the expected case. An installed but unloadable package would
+  // otherwise vanish silently, and tracing must not take the application down.
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') {
+    diag.warn('opentelemetry-instrumentation-elasticsearch failed to load:', error);
+  }
+}
+
 
 // Set a non-negative integer span attribute from a header value; ignore invalid input.
 const setIntAttribute = (span, name, value) => {
@@ -116,9 +130,10 @@ let loggerProvider = null;
 *
 * This function configures a NodeTracerProvider with various instrumentations
 * and span processors to enable tracing for the application. It supports
-* tracing for HTTP, Express, AWS, Pino, DNS, Elasticsearch, and IORedis.
-* The IORedis instrumentation includes peer.service attributes for proper
-* service map visualization in distributed tracing tools like Tempo.
+* tracing for HTTP, Express, AWS, Pino, DNS, and IORedis, and for Elasticsearch
+* when the optional opentelemetry-instrumentation-elasticsearch package is
+* installed. The IORedis instrumentation includes peer.service attributes for
+* proper service map visualization in distributed tracing tools like Tempo.
 *
 * A MeterProvider is registered alongside it, which is what makes the
 * instrumentations record the request duration histograms they already
@@ -356,7 +371,7 @@ export function setupTracing(options = {}) {
         return `${cmdName} ${args.join(' ')}`;
       },
     }),
-    new ElasticsearchInstrumentation(),
+    ...(ElasticsearchInstrumentation ? [new ElasticsearchInstrumentation()] : []),
     // Event loop delay, GC pauses and heap occupancy are metric-only, and they
     // are what explains a whole service slowing at once. Constructed only with
     // metrics on, since the collectors start sampling on construction.

@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "6.1.0",
+  "version": "7.0.0",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -54,15 +54,21 @@
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
-    "import-in-the-middle": "^3.0.0",
-    "opentelemetry-instrumentation-elasticsearch": "^0.41.0"
+    "import-in-the-middle": "^3.0.0"
   },
   "devDependencies": {
     "eslint": "^10.10.0"
   },
+  "peerDependencies": {
+    "opentelemetry-instrumentation-elasticsearch": "^0.41.0"
+  },
+  "peerDependenciesMeta": {
+    "opentelemetry-instrumentation-elasticsearch": {
+      "optional": true
+    }
+  },
   "overrides": {
-    "protobufjs": "^7.5.3",
-    "@opentelemetry/core": "^2.11.0"
+    "protobufjs": "^7.5.3"
   },
   "allowScripts": {
     "protobufjs@7.6.6": true

@@ -19,7 +19,7 @@ Several instrumentations record metrics as well as spans. Those measurements rea
 | Pino | `@opentelemetry/instrumentation-pino` | Always |
 | AWS SDK | `@opentelemetry/instrumentation-aws-sdk` | Always |
 | IORedis | `@opentelemetry/instrumentation-ioredis` | Always |
-| Elasticsearch | `opentelemetry-instrumentation-elasticsearch` | Always |
+| Elasticsearch | `opentelemetry-instrumentation-elasticsearch` | When the package is installed |
 | Node runtime | `@opentelemetry/instrumentation-runtime-node` | `enableMetrics` |
 | File system | `@opentelemetry/instrumentation-fs` | `enableFsInstrumentation` |
 | DNS | `@opentelemetry/instrumentation-dns` | `enableDnsInstrumentation` |
@@ -134,7 +134,27 @@ Event loop saturation slows every operation in a process at once. No span attrib
 
 ## Elasticsearch
 
-Registered with defaults. `peer.service` for an Elasticsearch call comes from the HTTP or undici hook, which matches `elasticsearch` in the remote host.
+`opentelemetry-instrumentation-elasticsearch` is an optional peer dependency. Install it alongside the library to register it:
+
+```shell
+npm install opentelemetry-instrumentation-elasticsearch --save
+```
+
+It is optional because it pins `@opentelemetry/core` to the 1.x line, which carries [GHSA-8988-4f7v-96qf](https://github.com/advisories/GHSA-8988-4f7v-96qf). Installing it resolves a second copy of `@opentelemetry/core` under the instrumentation, and a security audit of the resulting tree reports that advisory.
+
+Installed, it is registered with defaults and produces a span named `elasticsearch.request` per call.
+
+| Attribute | Value |
+|-----------|-------|
+| `db.system` | `elasticsearch` |
+| `db.operation` | The client method called |
+| `db.statement` | The serialised query |
+| `elasticsearch.request.indices` | The index the request targets |
+| `net.transport`, `net.peer.name`, `net.peer.port` | The connection to the cluster |
+
+These are the superseded 1.x semantic conventions, so they differ from the stable names the rest of this library emits.
+
+Absent, an Elasticsearch call still produces a client span from the HTTP or undici instrumentation, carrying the HTTP attributes and the request timing. `peer.service` and `db.system.name` are set to `elasticsearch` by the peer service hook, which matches `elasticsearch` in the remote host, so the service graph keeps its edge to the cluster. The query, the operation and the index name are not recorded.
 
 ## File system
 

@@ -26,6 +26,14 @@ Full documentation: [tracing-node.readthedocs.io](https://tracing-node.readthedo
 npm install @saidsef/tracing-node --save
 ```
 
+Elasticsearch spans carrying the query, the operation and the index name need an optional peer dependency:
+
+```shell
+npm install opentelemetry-instrumentation-elasticsearch --save
+```
+
+That package pins `@opentelemetry/core` to the 1.x line, so installing it brings [GHSA-8988-4f7v-96qf](https://github.com/advisories/GHSA-8988-4f7v-96qf) into the dependency tree. Without it, an Elasticsearch call is still traced as an HTTP client span and still appears on the service graph. See [Instrumentation](https://tracing-node.readthedocs.io/en/latest/instrumentation/) for what each option records.
+
 ## Usage
 
 ```javascript
