@@ -1,15 +1,16 @@
 # Contributing
 
-When contributing to this repository, please first discuss the change you wish to make via issue, email, or any other method with the owners of this repository before making a change.
+Please open an issue to discuss a change before you make it, or reach the owners of this repository by email or whatever other route you prefer. Agreeing the shape of a change first saves rework on both sides.
 
-Please note we have a code of conduct, please follow it in all your interactions with the project.
+This project has a code of conduct. It applies to every interaction with the project, so please follow it.
 
 ## Pull Request Process
 
-1. Ensure any install or build dependencies are removed before the end of the layer when doing a build.
-2. Update the `package.json`, run `npm run rebuild` and add commit message with details of changes, this includes new environment variables, useful file locations and parameters.
-3. Increase the version numbers is managed by the GitHub Actions CI workflow via `tagging.yml` and `release.yml`
-4. You may merge the Pull Request in once you have the sign-off of from the project team, or if you do not have permission to do that, you may request a reviewer to merge it for you.
+1. Run `npm run lint` and `npm test` locally. Both need to pass before you open the pull request.
+2. Bump the version in `package.json`, with the increment matching the scope of your change. Run `npm run rebuild` where you have changed a dependency, which refreshes `package-lock.json`.
+3. Describe the change in the commit message. Name any new environment variable, option or file path that a user of the library will need to know about.
+4. The `Release` workflow reads the version from `package.json`, tags `v<version>`, publishes the GitHub release and pushes the package to npm. You do not need to create a tag yourself.
+5. A member of the project team signs the pull request off before it merges. Ask a reviewer to merge it for you where you do not have permission to do it yourself.
 
 ## Code of Conduct
 

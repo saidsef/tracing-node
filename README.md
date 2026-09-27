@@ -8,9 +8,9 @@
 ![GitHub release(latest by date)](https://img.shields.io/github/v/release/saidsef/tracing-node)
 ![Commits](https://img.shields.io/github/commits-since/saidsef/tracing-node/latest.svg)
 
-**Traces, metrics and logs from one function call.** Add two lines to a service, and its requests, its calls to Redis, Elasticsearch, AWS and other services, its runtime counters and its Pino log records all arrive at your collector, already correlated by trace id and stitched into a service graph.
+**Traces, metrics and logs from one function call.** Add two lines to a service and everything it does arrives at your collector: its requests, its calls to Redis, Elasticsearch and AWS, its runtime counters, its Pino log records. All of it correlated by trace id and stitched into a service graph.
 
-`@saidsef/tracing-node` wraps the OpenTelemetry Node SDK. One call to `setupTracing` builds the tracer, meter and logger providers, registers them globally, and turns on a fixed set of instrumentations, so an application gets all three signals without assembling exporters, span processors, resource detectors and instrumentation packages itself. A second call logs a warning and returns the tracer that already exists, which makes initialisation idempotent.
+`@saidsef/tracing-node` wraps the OpenTelemetry Node SDK. One call to `setupTracing` builds the tracer, meter and logger providers, registers them globally, and turns on a fixed set of instrumentations. An application gets all three signals without assembling exporters, span processors, resource detectors and instrumentation packages itself. A second call logs a warning and returns the tracer that already exists, which makes initialisation idempotent.
 
 Full documentation: [tracing-node.readthedocs.io](https://tracing-node.readthedocs.io/).
 
@@ -32,7 +32,7 @@ Elasticsearch spans carrying the query, the operation and the index name need an
 npm install opentelemetry-instrumentation-elasticsearch --save
 ```
 
-That package pins `@opentelemetry/core` to the 1.x line, so installing it brings [GHSA-8988-4f7v-96qf](https://github.com/advisories/GHSA-8988-4f7v-96qf) into the dependency tree. Without it, an Elasticsearch call is still traced as an HTTP client span and still appears on the service graph. See [Instrumentation](https://tracing-node.readthedocs.io/en/latest/instrumentation/) for what each option records.
+That package pins `@opentelemetry/core` to the 1.x line, so installing it brings [GHSA-8988-4f7v-96qf](https://github.com/advisories/GHSA-8988-4f7v-96qf) into the dependency tree. Leave it out and an Elasticsearch call is still traced as an HTTP client span, still on the service graph. See [Instrumentation](https://tracing-node.readthedocs.io/en/latest/instrumentation/) for what each option records.
 
 ## Usage
 
@@ -49,11 +49,11 @@ node --import ./instrument.mjs ./app.mjs
 
 `serviceName` and `url` are required, and both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables.
 
-`setupTracing` has to run before the application imports the libraries being traced, which is what the `--import` preload guarantees. The library registers the `import-in-the-middle` loader hook on import, so ES modules and CommonJS modules are both patched. Importing an instrumented package statically in the same file as the library loads it too early to be patched, so the preload is the form to reach for. [Initialisation order](https://tracing-node.readthedocs.io/en/latest/usage/#initialisation-order) covers the alternatives.
+`setupTracing` has to run before the application imports the libraries being traced, and the `--import` preload guarantees it. The library registers the `import-in-the-middle` loader hook on import, which covers ES modules and CommonJS modules alike. Importing an instrumented package statically in the same file as the library loads it too early to patch, so reach for the preload. [Initialisation order](https://tracing-node.readthedocs.io/en/latest/usage/#initialisation-order) covers the alternatives.
 
 ## Collector and backend
 
-The exporter speaks OTLP over gRPC, so any OpenTelemetry-compatible collector accepts all three signals. Point `url` at yours.
+The exporter speaks OTLP over gRPC, which any OpenTelemetry-compatible collector accepts for all three signals. Point `url` at yours.
 
 [**grafana-loki-on-k8s**](https://github.com/saidsef/grafana-loki-on-k8s) is the companion stack, and the one the end to end harness in [`test/e2e/`](./test/e2e) targets. It deploys Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla to Kubernetes as small composable manifests.
 
@@ -62,7 +62,7 @@ git clone https://github.com/saidsef/grafana-loki-on-k8s
 kubectl apply -k grafana-loki-on-k8s/deployment
 ```
 
-Traces sent to its Alloy OTLP receiver on port 4317 land in Tempo, log records in Loki and metrics in Mimir. Tempo's metrics generator turns the spans into RED and service graph metrics, which is what the `peer.service` attribute this library sets exists to feed.
+Traces sent to its Alloy OTLP receiver on port 4317 land in Tempo, log records in Loki and metrics in Mimir. Tempo's metrics generator turns the spans into RED and service graph metrics. Feeding those is why this library sets the `peer.service` attribute.
 
 ## Documentation
 

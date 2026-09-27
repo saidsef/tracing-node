@@ -1,6 +1,6 @@
 # Architecture
 
-`setupTracing` assembles a tracer provider, registers it as the global provider, and registers the instrumentations against it. Everything the OpenTelemetry Node SDK needs is configured in one place, so a caller passes a service name and an endpoint rather than a pipeline.
+`setupTracing` assembles a tracer provider, registers it as the global provider, and registers the instrumentations against it. Everything the OpenTelemetry Node SDK needs is configured in one place. A caller passes a service name and an endpoint, not a pipeline.
 
 ## The pipeline
 
@@ -37,29 +37,29 @@ flowchart LR
 | Log processor | `BatchLogRecordProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
 | Log exporter | `OTLPLogExporter` | OTLP over gRPC, `logsUrl` from the options (default the trace endpoint) |
 
-Spans are batched rather than exported one at a time, so a span is visible in the backend up to `scheduledDelayMillis` after it ends. [Shutdown](usage.md#shutdown) covers the flush a process needs before it exits.
+The processor batches spans instead of exporting them one at a time, which delays a span's arrival in the backend by up to `scheduledDelayMillis` after it ends. [Shutdown](usage.md#shutdown) covers the flush a process needs before it exits.
 
 ## Metrics
 
-The instrumentations record their measurements against whichever meter provider is registered when `registerInstrumentations` runs. The HTTP and undici instrumentations record request duration histograms, and the AWS SDK instrumentation records Bedrock token usage and operation duration. Where no meter provider is registered, those instruments come from the no-op meter and every measurement is discarded.
+The instrumentations record their measurements against whichever meter provider is registered when `registerInstrumentations` runs. The HTTP and undici instrumentations record request duration histograms. The AWS SDK instrumentation records Bedrock token usage and operation duration. Where no meter provider is registered, those instruments come from the no-op meter and every measurement is discarded.
 
-`setupTracing` registers a `MeterProvider` and passes it to `registerInstrumentations`, which is what turns those measurements into exported metrics. `RuntimeNodeInstrumentation` is registered alongside them for the metrics no span can carry: event loop delay and utilisation, garbage collection duration, and heap occupancy.
+`setupTracing` registers a `MeterProvider` and passes it to `registerInstrumentations`. That turns the measurements into exported metrics. `RuntimeNodeInstrumentation` joins them for the metrics no span can carry: event loop delay and utilisation, garbage collection duration, and heap occupancy.
 
-Recording happens outside the sampler. The HTTP instrumentation records the duration after the span ends, without consulting the sampling decision, so metrics describe every request while traces describe a sampled subset.
+Recording happens outside the sampler. The HTTP instrumentation records the duration after the span ends and never consults the sampling decision, so metrics describe every request while traces describe a sampled subset.
 
 ## Logs
 
 The Pino instrumentation does two separate things. Log correlation adds `trace_id`, `span_id` and `trace_flags` to each record written to the application's own stream. Log sending routes a copy of each record to the OpenTelemetry logs API, and it is on by default.
 
-Log sending reaches a backend only when a logger provider is registered. Where none is, the record is parsed and rebuilt as a `LogRecord` and then handed to a no-op logger, so the cost is paid on every log line and nothing arrives. `setupTracing` registers a `LoggerProvider`, which turns that work into records delivered over OTLP, and sets `disableLogSending` when `enableLogs` is `false`, so the work stops rather than continuing for nothing.
+Log sending needs a registered logger provider to reach a backend. Without one, the record is still parsed and rebuilt as a `LogRecord`, then handed to a no-op logger. Every log line pays that cost. Nothing arrives. `setupTracing` registers a `LoggerProvider`, which turns the work into records delivered over OTLP, and it sets `disableLogSending` when `enableLogs` is `false` so the work stops instead of continuing for nothing.
 
 ## Shared resource
 
-The resource is built once and passed to all three providers. Grafana pairs a metric and a log line with a trace on `service.name`, which requires them to be identical.
+The resource is built once and passed to all three providers. Grafana pairs a metric and a log line with a trace on `service.name`, and that pairing needs the three to be identical.
 
 ## Resource attributes
 
-The resource is built in two steps. Detection runs first, then the explicit attributes are merged on top, so an explicitly passed service name wins over one found by the environment detector.
+The resource is built in two steps. Detection runs first, then the explicit attributes are merged on top. An explicitly passed service name wins over one the environment detector found.
 
 | Source | Attributes |
 |--------|------------|
@@ -70,13 +70,13 @@ The resource is built in two steps. Detection runs first, then the explicit attr
 | `serviceInstanceIdDetector` | `service.instance.id` |
 | Explicit | `service.name`, and `container.name` when a hostname is resolved |
 
-`container.name` is omitted entirely when no hostname is passed and neither `CONTAINER_NAME` nor `HOSTNAME` is set, rather than written as an undefined value.
+Where no hostname is passed and neither `CONTAINER_NAME` nor `HOSTNAME` is set, `container.name` is omitted from the resource altogether. It is never written as an undefined value.
 
 ## Propagation
 
-`register()` is called without overrides, which installs the `AsyncLocalStorageContextManager` and a composite propagator of W3C Trace Context and W3C Baggage. An incoming request carrying `traceparent` continues the caller's trace, and every outgoing HTTP or fetch call injects one.
+`register()` is called without overrides. That installs the `AsyncLocalStorageContextManager` and a composite propagator of W3C Trace Context and W3C Baggage. An incoming request carrying `traceparent` continues the caller's trace, and every outgoing HTTP or fetch call injects one.
 
-This is what pairs a caller's client span with the callee's server span. A service graph is built from those pairs, so propagation is the prerequisite for one.
+Propagation is what pairs a caller's client span with the callee's server span. A service graph is built from those pairs, so no propagation means no graph.
 
 ## Service graph attributes
 
@@ -91,14 +91,14 @@ Tempo names a service graph node from `peer.service`, and no instrumentation emi
 
 The known peer list holds `elasticsearch` and `redis`. A host containing either substring sets both `peer.service` and `db.system.name` to that value.
 
-Only outgoing requests carry `host`, so the HTTP hook returns without setting anything when there is none. That keeps server spans out of the graph as peers, where `peer.service` has to name the remote service being called rather than the local one.
+Only outgoing requests carry `host`, so the HTTP hook returns without setting anything when there is none. That keeps server spans out of the graph as peers. `peer.service` has to name the remote service being called, never the local one.
 
 ## Idempotency
 
-The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider, so repeated initialisation cannot register a second set of instrumentations or a second exporter against the same process.
+The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider. Repeated initialisation cannot register a second set of instrumentations, or a second exporter, against the same process.
 
-`stopTracing` shuts each provider down in turn, then clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call therefore builds a fresh pipeline. [Shutdown](usage.md#shutdown) covers what each step flushes.
+`stopTracing` shuts each provider down in turn, then clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call then builds a fresh pipeline. [Shutdown](usage.md#shutdown) covers what each step flushes.
 
 ## Diagnostics
 
-The OpenTelemetry diagnostic logger is set to a console logger at `INFO` level when the module is imported, before `setupTracing` runs. Exporter failures, instrumentation warnings and the messages this library emits are all written to the console through it.
+The OpenTelemetry diagnostic logger is set to a console logger at `INFO` level when the module is imported, before `setupTracing` runs. Exporter failures, instrumentation warnings and the messages this library emits all reach the console through it.
