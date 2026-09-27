@@ -12,7 +12,7 @@ The instrumentation is idempotent. A second call to `setupTracing` logs a warnin
 | fetch/undici instrumentation | Outgoing `globalThis.fetch` calls |
 | Express instrumentation | Route spans named `METHOD /route`, with params, query and user id |
 | Connect instrumentation | Middleware spans for Connect applications |
-| Elasticsearch client | Database spans |
+| Elasticsearch client | Database spans, when the optional instrumentation package is installed |
 | IORedis client | Cache spans named `redis.COMMAND` |
 | AWS SDK | Cloud service spans, with SQS context propagation from the payload |
 | Pino logger | Trace and span ids injected into log records |
