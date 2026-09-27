@@ -21,6 +21,16 @@ Spans are batched and exported every two seconds, so a short delay before the fi
 
 Instrumentation patches a module as it loads. A library imported before `setupTracing` ran is never patched. This is the most common reason an Express or Redis application traces its inbound HTTP calls and nothing else, since the HTTP instrumentation patches a core module that is loaded later than the application's own dependencies.
 
+## An ES module application produces no spans
+
+| Cause | Check | Fix |
+|-------|-------|-----|
+| The application imports its dependencies in the same file as the library | Whether `express` or `ioredis` is a static `import` beside `setupTracing` | Move initialisation into a preload, see [Initialisation order](usage.md#initialisation-order) |
+| The loader hook was turned off | Whether `TRACING_NODE_ESM_HOOK` is `false` or `0` | Leave it unset, unless the application registers `import-in-the-middle` itself |
+| The hook failed to register | The warning naming the ESM loader hook on stdout | Confirm `import-in-the-middle` resolves from the installed library |
+
+Node loads a whole module graph before evaluating any of it, so an instrumented package imported statically alongside the library is loaded too early for the hook to reach. A CommonJS application is unaffected, because `require-in-the-middle` patches each module on `require`.
+
 ## fetch calls are not traced
 
 `globalThis.fetch` runs on undici rather than the `http` module. The undici instrumentation covers it and is always registered, so a missing fetch span points at the initialisation order rather than at configuration.

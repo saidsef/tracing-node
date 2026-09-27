@@ -1,6 +1,7 @@
 // index.test.mjs
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import { metrics } from '@opentelemetry/api';
 import { logs } from '@opentelemetry/api-logs';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
@@ -260,5 +261,38 @@ describe('express request hook', () => {
     const span = fakeSpan();
     assert.doesNotThrow(() => __expressRequestHookForTesting(span, {layerType: 'request_handler'}));
     assert.deepStrictEqual(span.attributes, {});
+  });
+});
+
+// A loader hook registers once per process, so the opt-out cannot be exercised
+// in this one. Each case reads the module in a child process instead.
+describe('ESM loader hook', () => {
+  const hookModule = new URL('./esm-hook.mjs', import.meta.url).href;
+
+  const registeredWith = (value) => {
+    const env = {...process.env};
+    delete env.TRACING_NODE_ESM_HOOK;
+    if (value !== undefined) {
+      env.TRACING_NODE_ESM_HOOK = value;
+    }
+    return execFileSync(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `import {esmHookRegistered} from ${JSON.stringify(hookModule)}; console.log(esmHookRegistered);`,
+    ], {env, encoding: 'utf8'}).trim();
+  };
+
+  it('should register by default', () => {
+    assert.strictEqual(registeredWith(undefined), 'true');
+  });
+
+  it('should skip registration when opted out', () => {
+    assert.strictEqual(registeredWith('false'), 'false');
+    assert.strictEqual(registeredWith('0'), 'false');
+  });
+
+  it('should register for any other value', () => {
+    assert.strictEqual(registeredWith('true'), 'true');
+    assert.strictEqual(registeredWith(''), 'true');
   });
 });

@@ -12,15 +12,7 @@ The package is ESM only and declares `"type": "module"`. Node 24.0.0 or later is
 
 Instrumentation works by patching modules as they are loaded, so `setupTracing` has to run before the application requires or imports the libraries being traced. Calling it after Express or IORedis has been loaded leaves those modules unpatched and produces no spans for them.
 
-### ESM application
-
-```javascript
-import {setupTracing} from '@saidsef/tracing-node';
-
-setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
-
-const {default: app} = await import('./app.mjs');
-```
+The two module systems are patched by different mechanisms. A CommonJS module is patched by `require-in-the-middle` as each `require` runs. An ES module needs a loader hook, which this library registers when it is first imported. The hook reaches only the modules loaded after it, and Node loads a whole module graph before evaluating any of it, so an instrumented package imported statically alongside the library is already loaded by the time the hook registers.
 
 ### Preload
 
@@ -32,10 +24,35 @@ setupTracing();
 ```
 
 ```shell
-node --import ./instrument.mjs ./app.cjs
+node --import ./instrument.mjs ./app.mjs
 ```
 
-The preload form is the reliable one. `--import` runs the module to completion before the application entry point loads, and it works for a CommonJS application, where `require-in-the-middle` patches each module on `require`. The [end to end harness](testing.md#end-to-end-harness) uses this form.
+`--import` runs the module to completion before the application entry point loads, which covers both module systems. This is the recommended form, and the [end to end harness](testing.md#end-to-end-harness) uses it.
+
+### Dynamic import
+
+Where a preload is impractical, the entry point imports the library statically and the application dynamically, so the application loads once the hook is in place.
+
+```javascript
+import {setupTracing} from '@saidsef/tracing-node';
+
+setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
+
+const {default: app} = await import('./app.mjs');
+```
+
+Static imports in a single file do not work for this, whatever order they are written in.
+
+```javascript
+import {setupTracing} from '@saidsef/tracing-node';
+import express from 'express'; // loaded before the hook registers, so never patched
+```
+
+### ESM loader hook
+
+The hook is `import-in-the-middle`, registered ahead of every instrumentation when the library is imported. Setting `TRACING_NODE_ESM_HOOK` to `false` or `0` skips registration, which suits an application that registers `import-in-the-middle` itself, for example through `@opentelemetry/auto-instrumentations-node/register`. Registering the hook twice risks patching a module twice.
+
+A registration failure is reported as a warning through the diagnostic logger, and CommonJS patching continues to work.
 
 ## Options
 
@@ -79,6 +96,7 @@ setupTracing({
 | `ENDPOINT` | `url` | Yes, unless the option is passed |
 | `CONTAINER_NAME` | `hostname` | No |
 | `HOSTNAME` | `hostname`, when `CONTAINER_NAME` is unset | No |
+| `TRACING_NODE_ESM_HOOK` | ESM loader hook registration, skipped on `false` or `0` | No |
 
 An option passed to `setupTracing` takes precedence over the matching environment variable. `OTEL_RESOURCE_ATTRIBUTES` is read by the environment resource detector, and any `service.name` it carries is overridden by the explicit one.
 
