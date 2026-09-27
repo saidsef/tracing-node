@@ -6,13 +6,13 @@
 npm install @saidsef/tracing-node --save
 ```
 
-The package is ESM only and declares `"type": "module"`. Node 24.0.0 or later is required.
+The package is ESM only and declares `"type": "module"`. It needs Node 24.0.0 or later.
 
 ## Initialisation order
 
-Instrumentation works by patching modules as they are loaded, so `setupTracing` has to run before the application requires or imports the libraries being traced. Calling it after Express or IORedis has been loaded leaves those modules unpatched and produces no spans for them.
+Instrumentation patches modules as they load, which puts a hard constraint on when `setupTracing` runs: before the application requires or imports the libraries being traced. Call it after Express or IORedis has loaded and those modules stay unpatched. They produce no spans.
 
-The two module systems are patched by different mechanisms. A CommonJS module is patched by `require-in-the-middle` as each `require` runs. An ES module needs a loader hook, which this library registers when it is first imported. The hook reaches only the modules loaded after it, and Node loads a whole module graph before evaluating any of it, so an instrumented package imported statically alongside the library is already loaded by the time the hook registers.
+Each module system is patched by a different mechanism. `require-in-the-middle` handles a CommonJS module as each `require` runs. An ES module needs a loader hook, which this library registers on first import. That hook reaches only the modules loaded after it. Node loads a whole module graph before evaluating any of it, so an instrumented package imported statically alongside the library has already loaded by the time the hook registers.
 
 ### Preload
 
@@ -27,11 +27,11 @@ setupTracing();
 node --import ./instrument.mjs ./app.mjs
 ```
 
-`--import` runs the module to completion before the application entry point loads, which covers both module systems. This is the recommended form, and the [end to end harness](testing.md#end-to-end-harness) uses it.
+`--import` runs the module to completion before the application entry point loads, covering both module systems. This is the recommended form. The [end to end harness](testing.md#end-to-end-harness) uses it.
 
 ### Dynamic import
 
-Where a preload is impractical, the entry point imports the library statically and the application dynamically, so the application loads once the hook is in place.
+Where a preload is impractical, the entry point imports the library statically and the application dynamically. The application then loads with the hook already in place.
 
 ```javascript
 import {setupTracing} from '@saidsef/tracing-node';
@@ -41,7 +41,7 @@ setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 const {default: app} = await import('./app.mjs');
 ```
 
-Static imports in a single file do not work for this, whatever order they are written in.
+Static imports in a single file never work for this, whatever order they are written in.
 
 ```javascript
 import {setupTracing} from '@saidsef/tracing-node';
@@ -50,9 +50,9 @@ import express from 'express'; // loaded before the hook registers, so never pat
 
 ### ESM loader hook
 
-The hook is `import-in-the-middle`, registered ahead of every instrumentation when the library is imported. Setting `TRACING_NODE_ESM_HOOK` to `false` or `0` skips registration, which suits an application that registers `import-in-the-middle` itself, for example through `@opentelemetry/auto-instrumentations-node/register`. Registering the hook twice risks patching a module twice.
+The hook is `import-in-the-middle`, registered ahead of every instrumentation when the library is imported. Set `TRACING_NODE_ESM_HOOK` to `false` or `0` to skip registration. That suits an application registering `import-in-the-middle` itself, through `@opentelemetry/auto-instrumentations-node/register` for instance, where registering the hook twice risks patching a module twice.
 
-A registration failure is reported as a warning through the diagnostic logger, and CommonJS patching continues to work.
+A registration failure becomes a warning on the diagnostic logger. CommonJS patching carries on working.
 
 ## Options
 
@@ -98,35 +98,35 @@ setupTracing({
 | `HOSTNAME` | `hostname`, when `CONTAINER_NAME` is unset | No |
 | `TRACING_NODE_ESM_HOOK` | ESM loader hook registration, skipped on `false` or `0` | No |
 
-An option passed to `setupTracing` takes precedence over the matching environment variable. `OTEL_RESOURCE_ATTRIBUTES` is read by the environment resource detector, and any `service.name` it carries is overridden by the explicit one.
+An option passed to `setupTracing` beats the matching environment variable. The environment resource detector reads `OTEL_RESOURCE_ATTRIBUTES`, and the explicit service name overrides any `service.name` it carries.
 
 ## Metrics
 
-Metrics are exported by default, over OTLP gRPC, to the same endpoint as traces. An OpenTelemetry Collector or Grafana Alloy accepts all signals on port 4317, so a single endpoint covers both. Point `metricsUrl` elsewhere where the trace endpoint takes traces alone, for example a Tempo OTLP receiver, and set `enableMetrics` to `false` where metrics are not wanted at all.
+The library exports metrics by default, over OTLP gRPC, to the same endpoint as traces. An OpenTelemetry Collector or Grafana Alloy accepts every signal on port 4317, so one endpoint covers both. Point `metricsUrl` somewhere else where the trace endpoint takes traces alone, a Tempo OTLP receiver for instance. Set `enableMetrics` to `false` where metrics are not wanted at all.
 
-Aggregation temporality is cumulative, which is what Prometheus and Mimir expect. `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` overrides it.
+Aggregation temporality is cumulative, which Prometheus and Mimir both expect. `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` overrides it.
 
 The export interval is 60 seconds. A shorter interval raises resolution and the volume written to the backend in equal measure.
 
-Sampling does not reach the metrics, so `OTEL_TRACES_SAMPLER` can be turned down without losing accuracy. [Metrics](architecture.md#metrics) covers why.
+Sampling never reaches the metrics, so `OTEL_TRACES_SAMPLER` can be turned down without losing accuracy. [Metrics](architecture.md#metrics) covers why.
 
 ## Logs
 
-Pino log records are exported by default, over OTLP gRPC, to the same endpoint as traces. Each record carries the trace id and span id of the request that wrote it, which is what links a log line to its trace in Grafana. The application keeps writing to its own stream, so container logs are unchanged.
+The library exports Pino log records by default, over OTLP gRPC, to the same endpoint as traces. Each record carries the trace id and span id of the request that wrote it, and Grafana needs both to link a log line to its trace. The application keeps writing to its own stream, so container logs are unchanged.
 
-Setting `enableLogs` to `false` disables log sending at the instrumentation, rather than leaving each record to be built and then discarded. [Logs](architecture.md#logs) covers that path.
+Setting `enableLogs` to `false` disables log sending at the instrumentation itself. Each record is then never built in the first place, instead of being built and discarded. [Logs](architecture.md#logs) covers that path.
 
-Point `logsUrl` elsewhere where the trace endpoint does not accept logs.
+Point `logsUrl` somewhere else where the trace endpoint does not accept logs.
 
-Log export covers Pino alone. An application logging through anything else is unaffected by these options.
+Log export covers Pino alone. These options do nothing for an application logging through anything else.
 
 ## Optional instrumentations
 
-`enableFsInstrumentation` and `enableDnsInstrumentation` are off by default. Both instrumentations patch on construction, so each is constructed only when its option is set. File system tracing in particular produces a large number of spans and is worth enabling only while investigating file access. [Instrumentation](instrumentation.md#file-system) covers what each emits.
+`enableFsInstrumentation` and `enableDnsInstrumentation` are off by default. Both instrumentations patch on construction, so the library constructs each one only when its option is set. File system tracing produces a large number of spans and earns its keep only while file access is under investigation. [Instrumentation](instrumentation.md#file-system) covers what each emits.
 
 ## Using the returned tracer
 
-`setupTracing` returns a tracer for the service, which creates manual spans for work no instrumentation covers.
+`setupTracing` returns a tracer for the service. Use it for manual spans over work no instrumentation covers.
 
 ```javascript
 const tracer = setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
@@ -140,7 +140,7 @@ await tracer.startActiveSpan('reconcile', async (span) => {
 });
 ```
 
-A span created this way is a child of whatever span is active in the current context, so a manual span inside a request handler joins that request's trace.
+A span created this way becomes a child of whatever span is active in the current context. A manual span inside a request handler joins that request's trace.
 
 ## Shutdown
 
@@ -153,10 +153,12 @@ process.on('SIGTERM', async () => {
 });
 ```
 
-`stopTracing` awaits the tracer provider shutdown, which flushes the batch span processor, then the meter provider shutdown, which flushes a final metric export, then the logger provider shutdown, which flushes queued log records. Each is awaited separately, so a failing exporter on one signal still lets the others flush. The providers are then cleared, so a later `setupTracing` call builds a fresh pipeline. `stopTracing` logs a warning and returns when tracing was never initialised, and logs an error rather than throwing when shutdown fails.
+`stopTracing` awaits three shutdowns in turn. The tracer provider flushes the batch span processor, the meter provider flushes a final metric export, and the logger provider flushes queued log records. Each is awaited separately, which leaves the other two signals free to flush when one exporter fails. The providers are then cleared, so a later `setupTracing` call builds a fresh pipeline.
 
-Spans and log records are batched, and metrics are exported on an interval, so a process that exits without this loses whatever is still queued.
+Called when tracing was never initialised, `stopTracing` logs a warning and returns. A failed shutdown produces an error on the log rather than a thrown exception.
+
+Spans and log records are batched, and metrics are exported on an interval. A process that exits without this loses whatever is still queued.
 
 ## Repeated initialisation
 
-A second `setupTracing` call logs `Tracing is already initialized. Returning existing tracer.` and returns a tracer from the existing provider. The options passed to the second call are ignored, apart from `serviceName`, which names the returned tracer.
+A second `setupTracing` call logs `Tracing is already initialized. Returning existing tracer.` and returns a tracer from the existing provider. It ignores the options passed to it, `serviceName` excepted, which names the returned tracer.

@@ -1,8 +1,8 @@
 # tracing-node
 
-`@saidsef/tracing-node` is a wrapper around the OpenTelemetry Node SDK. One call to `setupTracing` builds a tracer provider, registers it globally, and turns on a fixed set of instrumentations, so an application gets distributed tracing without assembling exporters, span processors, resource detectors and instrumentation packages itself.
+`@saidsef/tracing-node` wraps the OpenTelemetry Node SDK. One call to `setupTracing` builds the tracer, meter and logger providers, registers them globally, and turns on a fixed set of instrumentations. An application gets all three signals without assembling exporters, span processors, resource detectors and instrumentation packages itself.
 
-The instrumentation is idempotent. A second call to `setupTracing` logs a warning and returns the tracer from the provider that already exists, so a library that initialises tracing does not fight with an application that does the same.
+Initialisation is idempotent. A second call to `setupTracing` logs a warning and returns the tracer from the provider that already exists, which keeps a library that initialises tracing from fighting an application that does the same.
 
 ## Features
 
@@ -46,11 +46,11 @@ setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 node --import ./instrument.mjs ./app.mjs
 ```
 
-`serviceName` and `url` are required. Both are read from the `SERVICE_NAME` and `ENDPOINT` environment variables when they are not passed. The preload matters, because an instrumented package imported statically alongside the library loads too early to be patched. [Configuration](usage.md) covers the full option set and the order in which tracing has to be initialised.
+`serviceName` and `url` are required. Both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables. The preload matters: an instrumented package imported statically alongside the library loads too early to be patched. [Configuration](usage.md) covers the full option set and the order in which tracing has to be initialised.
 
 ## Where the traces go
 
-The exporter speaks OTLP over gRPC, so any OpenTelemetry-compatible collector or backend accepts them. Point `url` at yours.
+The exporter speaks OTLP over gRPC, which any OpenTelemetry-compatible collector or backend accepts. Point `url` at yours.
 
 [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) is a companion project that deploys the LGTM+ stack - Grafana, Prometheus, Mimir, Loki, Tempo, Pyroscope, Alloy and Beyla - to Kubernetes. [Deployment](deployment.md) covers pointing a service at its Alloy receiver, with the environment variables and manifests.
 

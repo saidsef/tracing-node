@@ -25,7 +25,7 @@ The suite runs on the Node test runner against `libs/index.test.mjs`, with `--tr
 | `logsUrl` given | Accepted, and the provider is still registered |
 | Logger shutdown | The logger provider is unregistered, so a later setup registers again |
 
-The express request hook is covered separately, since the instrumentation calls it once per layer span:
+The express request hook gets its own set of cases, because the instrumentation calls it once per layer span:
 
 | Case | Expectation |
 |------|-------------|
@@ -36,7 +36,7 @@ The express request hook is covered separately, since the instrumentation calls 
 | `request.user.id` set | Recorded as `user.id` |
 | Layer with no request | Returns without throwing |
 
-The providers live in module scope, so tests reset them between cases through the internal `__resetTracingForTesting` export. That export exists for the test suite and is not part of the public interface.
+The providers live in module scope, so the tests reset them between cases through the internal `__resetTracingForTesting` export. That export serves the test suite alone. It is not part of the public interface.
 
 ## Linting
 
@@ -48,11 +48,11 @@ ESLint runs over `libs/**` with the rule set in `eslint.config.mjs`.
 
 ## Continuous integration
 
-The `CI` workflow runs on every pull request against `main`, over a matrix of Node 24, 25 and 26. Each job installs with `npm ci`, then runs the lint and test scripts. A pull request whose matrix passes is approved automatically by a following job.
+The `CI` workflow runs on every pull request against `main`, over a matrix of Node 24, 25 and 26. Each job installs with `npm ci`, then runs the lint and test scripts. A following job approves a pull request whose matrix passes.
 
 ## End to end harness
 
-`test/e2e/` holds a demo application that exercises the instrumentations against real services and sends the spans to a collector. A single request to `/work/:id` produces an HTTP server span, an Express route span, Redis `SET` and `GET` spans, and log lines carrying the trace and span ids.
+`test/e2e/` holds a demo application that exercises the instrumentations against real services and sends the spans to a collector. One request to `/work/:id` produces an HTTP server span, an Express route span, Redis `SET` and `GET` spans, and log lines carrying the trace and span ids.
 
 | File | Purpose |
 |------|---------|
@@ -64,13 +64,13 @@ The `CI` workflow runs on every pull request against `main`, over a matrix of No
 
 ### Build and run
 
-The build context is the repository root, so that the library source and its production dependencies are installed into the image alongside the demo application.
+The build context is the repository root. That puts the library source and its production dependencies into the image alongside the demo application.
 
 ```shell
 docker build -t tracing-e2e-demo:local -f test/e2e/Dockerfile .
 ```
 
-The manifests deploy into the `monitoring` namespace and send traces to `alloy.monitoring.svc.cluster.local:4317`, which is where [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) puts its OTLP receiver. Load the image into the cluster first, since `imagePullPolicy` is `IfNotPresent` and the tag is local.
+The manifests deploy into the `monitoring` namespace and send traces to `alloy.monitoring.svc.cluster.local:4317`, where [grafana-loki-on-k8s](https://github.com/saidsef/grafana-loki-on-k8s) puts its OTLP receiver. Load the image into the cluster first, since `imagePullPolicy` is `IfNotPresent` and the tag is local.
 
 ```shell
 kind load docker-image tracing-e2e-demo:local
@@ -90,4 +90,4 @@ curl localhost:8080/work/1
 | The same log lines, queryable by `service_name` | Loki |
 | A `tracing-e2e-demo` to `redis` edge | The Tempo service graph, once the metrics generator has run |
 
-No span appears for `/healthz`, because the HTTP instrumentation ignores it. The readiness probe therefore adds nothing to the trace store.
+No span appears for `/healthz`, because the HTTP instrumentation ignores it. The readiness probe adds nothing to the trace store.
