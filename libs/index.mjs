@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// First, and deliberately: registering the ESM loader hook has to happen before
+// any instrumented module is imported.
+import {esmHookFailure} from './esm-hook.mjs';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
@@ -40,6 +43,12 @@ import {ATTR_SERVICE_NAME} from '@opentelemetry/semantic-conventions';
 import {ATTR_CONTAINER_NAME} from '@opentelemetry/semantic-conventions/incubating';
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
+
+// Reported here rather than where it happens, because the hook registers before
+// this logger exists and the warning would go nowhere.
+if (esmHookFailure) {
+  diag.warn(`ESM loader hook not registered, so ES module imports are not instrumented: ${esmHookFailure.message}`);
+}
 
 // Set a non-negative integer span attribute from a header value; ignore invalid input.
 const setIntAttribute = (span, name, value) => {

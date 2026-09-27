@@ -29,12 +29,19 @@ npm install @saidsef/tracing-node --save
 ## Usage
 
 ```javascript
+// instrument.mjs
 import { setupTracing } from '@saidsef/tracing-node';
 
 setupTracing({hostname: 'hostname', serviceName: 'service_name', url: 'endpoint'});
 ```
 
-`serviceName` and `url` are required, and both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables. `setupTracing` has to run before the application imports the libraries being traced.
+```shell
+node --import ./instrument.mjs ./app.mjs
+```
+
+`serviceName` and `url` are required, and both fall back to the `SERVICE_NAME` and `ENDPOINT` environment variables.
+
+`setupTracing` has to run before the application imports the libraries being traced, which is what the `--import` preload guarantees. The library registers the `import-in-the-middle` loader hook on import, so ES modules and CommonJS modules are both patched. Importing an instrumented package statically in the same file as the library loads it too early to be patched, so the preload is the form to reach for. [Initialisation order](https://tracing-node.readthedocs.io/en/latest/usage/#initialisation-order) covers the alternatives.
 
 ## Collector and backend
 

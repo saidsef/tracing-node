@@ -26,7 +26,7 @@ The instrumentation is idempotent. A second call to `setupTracing` logs a warnin
 | Requirement | Value |
 |-------------|-------|
 | Node | >= 24.0.0 |
-| Module system | ESM (`"type": "module"`), or CJS loaded behind an ESM preload |
+| Module system | ESM (`"type": "module"`); an ESM or CommonJS application is patched behind an `--import` preload |
 | Collector | Any endpoint accepting OTLP over gRPC |
 
 ## Quick start
@@ -36,12 +36,17 @@ npm install @saidsef/tracing-node --save
 ```
 
 ```javascript
+// instrument.mjs
 import {setupTracing} from '@saidsef/tracing-node';
 
 setupTracing({serviceName: 'my-service', url: 'http://alloy:4317'});
 ```
 
-`serviceName` and `url` are required. Both are read from the `SERVICE_NAME` and `ENDPOINT` environment variables when they are not passed. [Configuration](usage.md) covers the full option set and the order in which tracing has to be initialised.
+```shell
+node --import ./instrument.mjs ./app.mjs
+```
+
+`serviceName` and `url` are required. Both are read from the `SERVICE_NAME` and `ENDPOINT` environment variables when they are not passed. The preload matters, because an instrumented package imported statically alongside the library loads too early to be patched. [Configuration](usage.md) covers the full option set and the order in which tracing has to be initialised.
 
 ## Where the traces go
 
