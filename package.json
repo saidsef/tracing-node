@@ -1,6 +1,6 @@
 {
   "name": "@saidsef/tracing-node",
-  "version": "7.0.1",
+  "version": "7.0.2",
   "description": "tracing NodeJS - Wrapper for OpenTelemetry instrumentation packages",
   "main": "libs/index.mjs",
   "scripts": {
@@ -54,7 +54,7 @@
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
-    "import-in-the-middle": "^3.0.0"
+    "import-in-the-middle": "^3.5.2"
   },
   "devDependencies": {
     "eslint": "^10.10.0"

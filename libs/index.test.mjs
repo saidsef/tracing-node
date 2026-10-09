@@ -1,7 +1,7 @@
 // index.test.mjs
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { metrics } from '@opentelemetry/api';
 import { logs } from '@opentelemetry/api-logs';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
@@ -268,19 +268,31 @@ describe('express request hook', () => {
 // in this one. Each case reads the module in a child process instead.
 describe('ESM loader hook', () => {
   const hookModule = new URL('./esm-hook.mjs', import.meta.url).href;
+  const indexModule = new URL('./index.mjs', import.meta.url).href;
 
-  const registeredWith = (value) => {
+  const runWith = (value, source) => {
     const env = {...process.env};
     delete env.TRACING_NODE_ESM_HOOK;
     if (value !== undefined) {
       env.TRACING_NODE_ESM_HOOK = value;
     }
-    return execFileSync(process.execPath, [
-      '--input-type=module',
-      '--eval',
-      `import {esmHookRegistered} from ${JSON.stringify(hookModule)}; console.log(esmHookRegistered);`,
-    ], {env, encoding: 'utf8'}).trim();
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', source], {env, encoding: 'utf8'});
+    assert.strictEqual(result.status, 0, result.stderr);
+    return result;
   };
+
+  const registeredWith = (value) => runWith(value,
+    `import {esmHookRegistered} from ${JSON.stringify(hookModule)}; console.log(esmHookRegistered);`,
+  ).stdout.trim();
+
+  // The flag cannot show that patching works, so the child imports node:http
+  // after setup and reports whether the instrumentation wrapped it.
+  const httpWrappedWith = (value) => runWith(value, [
+    `import {setupTracing} from ${JSON.stringify(indexModule)};`,
+    `setupTracing({serviceName: 'esm-hook-test', url: 'http://127.0.0.1:4317'});`,
+    `const {request} = await import('node:http');`,
+    `process.stdout.write(String(request.__wrapped === true), () => process.exit(0));`,
+  ].join('\n')).stdout.trim();
 
   it('should register by default', () => {
     assert.strictEqual(registeredWith(undefined), 'true');
@@ -294,5 +306,16 @@ describe('ESM loader hook', () => {
   it('should register for any other value', () => {
     assert.strictEqual(registeredWith('true'), 'true');
     assert.strictEqual(registeredWith(''), 'true');
+  });
+
+  // Node 26 deprecates module.register() at runtime. See DEP0205.
+  it('should register without the module.register() deprecation', () => {
+    const {stderr} = runWith(undefined, `import ${JSON.stringify(hookModule)};`);
+    assert.doesNotMatch(stderr, /DEP0205/);
+  });
+
+  it('should patch ES module imports made after setup', () => {
+    assert.strictEqual(httpWrappedWith(undefined), 'true');
+    assert.strictEqual(httpWrappedWith('false'), 'false');
   });
 });
