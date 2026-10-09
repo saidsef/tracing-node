@@ -48,7 +48,7 @@ ESLint runs over `libs/**` with the rule set in `eslint.config.mjs`.
 
 ## Continuous integration
 
-The `CI` workflow runs on every pull request against `main`, over a matrix of Node 22, 23, 24, 25 and 26. Each job installs with `npm ci`, then runs the lint and test scripts. A following job approves a pull request whose matrix passes.
+The `CI` workflow runs on every pull request against `main`, over a matrix of Node 24, 25 and 26. Each job installs with `npm ci`, then runs the lint and test scripts. A following job approves a pull request whose matrix passes.
 
 ## End to end harness
 
