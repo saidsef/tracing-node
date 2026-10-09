@@ -54,7 +54,7 @@
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
-    "import-in-the-middle": "^3.0.0"
+    "import-in-the-middle": "^3.5.2"
   },
   "devDependencies": {
     "eslint": "^10.10.0"

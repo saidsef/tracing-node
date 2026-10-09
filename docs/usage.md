@@ -50,7 +50,7 @@ import express from 'express'; // loaded before the hook registers, so never pat
 
 ### ESM loader hook
 
-The hook is `import-in-the-middle`, registered ahead of every instrumentation when the library is imported. Set `TRACING_NODE_ESM_HOOK` to `false` or `0` to skip registration. That suits an application registering `import-in-the-middle` itself, through `@opentelemetry/auto-instrumentations-node/register` for instance, where registering the hook twice risks patching a module twice.
+The hook is `import-in-the-middle`, registered ahead of every instrumentation when the library is imported. The library registers it through `module.registerHooks()`. Node releases before 24.11.1 cannot run synchronous hooks, and on those the library uses `module.register()` instead. Set `TRACING_NODE_ESM_HOOK` to `false` or `0` to skip registration. That suits an application registering `import-in-the-middle` itself, through `@opentelemetry/auto-instrumentations-node/register` for instance, where registering the hook twice risks patching a module twice.
 
 A registration failure becomes a warning on the diagnostic logger. CommonJS patching carries on working.
 

@@ -15,11 +15,11 @@
  */
 
 import {register} from 'node:module';
+import {register as registerHooks, supportsSyncHooks} from 'import-in-the-middle/register-hooks.mjs';
 
 // A loader hook only reaches modules imported after it registers, so this lives
 // in its own module and is the first import of index.mjs, ahead of every
-// instrumentation. import.meta.url resolves the hook against this package:
-// import-in-the-middle sits in the library's own tree, not the consumer's.
+// instrumentation.
 
 const FALSEY = ['false', '0'];
 
@@ -29,7 +29,13 @@ let failure = null;
 
 if (enabled) {
   try {
-    register('import-in-the-middle/hook.mjs', import.meta.url);
+    if (supportsSyncHooks()) {
+      registerHooks();
+    } else {
+      // Node 24 before 24.11.1 cannot run the synchronous hooks. import.meta.url
+      // resolves the hook against this package, not the consumer's tree.
+      register('import-in-the-middle/hook.mjs', import.meta.url);
+    }
   } catch (error) {
     failure = error;
   }
