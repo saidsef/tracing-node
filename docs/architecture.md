@@ -7,7 +7,7 @@
 ```mermaid
 flowchart LR
   A[Application] --> B[Instrumentations]
-  B --> C[NodeTracerProvider]
+  B --> C[TracerProvider]
   C --> D[BatchSpanProcessor]
   D --> E[OTLPTraceExporter<br/>gRPC]
   E --> F[Collector]
@@ -26,10 +26,10 @@ flowchart LR
 
 | Stage | Component | Configuration |
 |-------|-----------|---------------|
-| Provider | `NodeTracerProvider` | Resource from detectors, merged with the explicit service and container attributes |
+| Provider | `TracerProvider` | Resource from detectors, merged with the explicit service and container attributes |
 | Processor | `BatchSpanProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
 | Exporter | `OTLPTraceExporter` | OTLP over gRPC, `timeoutMillis` 10000, `concurrencyLimit` from the options (default 10) |
-| Registration | `tracerProvider.register()` | Global tracer provider, context manager and propagators, see [Propagation](#propagation) |
+| Registration | `trace`, `context` and `propagation` APIs | Global tracer provider, context manager and propagators, see [Propagation](#propagation) |
 | Meter provider | `MeterProvider` | Same resource as the tracer provider, registered as the global meter provider |
 | Metric reader | `PeriodicExportingMetricReader` | `exportIntervalMillis` from the options (default 60000) |
 | Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint) |
@@ -74,7 +74,7 @@ Where no hostname is passed and neither `CONTAINER_NAME` nor `HOSTNAME` is set, 
 
 ## Propagation
 
-`register()` is called without overrides. That installs the `AsyncLocalStorageContextManager` and a composite propagator of W3C Trace Context and W3C Baggage. An incoming request carrying `traceparent` continues the caller's trace, and every outgoing HTTP or fetch call injects one.
+`setupTracing` registers the `AsyncLocalStorageContextManager` as the global context manager, and a composite propagator of W3C Trace Context and W3C Baggage as the global propagator. An incoming request carrying `traceparent` continues the caller's trace, and every outgoing HTTP or fetch call injects one.
 
 Propagation is what pairs a caller's client span with the callee's server span. A service graph is built from those pairs, so no propagation means no graph.
 
