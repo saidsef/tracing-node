@@ -18,14 +18,14 @@
 // any instrumented module is imported.
 import {esmHookFailure} from './esm-hook.mjs';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
-import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-base';
+import {AsyncLocalStorageContextManager} from '@opentelemetry/context-async-hooks';
+import {BatchSpanProcessor, TracerProvider} from '@opentelemetry/sdk-trace';
 import {ConnectInstrumentation} from '@opentelemetry/instrumentation-connect';
-import {diag, DiagConsoleLogger, DiagLogLevel, metrics} from '@opentelemetry/api';
+import {CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator} from '@opentelemetry/core';
+import {context, diag, DiagConsoleLogger, DiagLogLevel, logs, metrics, propagation, trace} from '@opentelemetry/api';
 import {HttpInstrumentation} from '@opentelemetry/instrumentation-http';
 import {DnsInstrumentation} from '@opentelemetry/instrumentation-dns';
 import {ExpressInstrumentation, ExpressLayerType} from '@opentelemetry/instrumentation-express';
-import {logs} from '@opentelemetry/api-logs';
-import {NodeTracerProvider} from '@opentelemetry/sdk-trace-node';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-grpc';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-grpc';
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
@@ -128,7 +128,7 @@ let loggerProvider = null;
 /**
 * Sets up tracing for the application using OpenTelemetry.
 *
-* This function configures a NodeTracerProvider with various instrumentations
+* This function configures a TracerProvider with various instrumentations
 * and span processors to enable tracing for the application. It supports
 * tracing for HTTP, Express, AWS, Pino, DNS, and IORedis, and for Elasticsearch
 * when the optional opentelemetry-instrumentation-elasticsearch package is
@@ -192,7 +192,8 @@ export function setupTracing(options = {}) {
 
   const exporter = new OTLPTraceExporter(exportOptions);
 
-  const spanProcessor = new BatchSpanProcessor(exporter, {
+  const spanProcessor = new BatchSpanProcessor({
+    exporter,
     maxQueueSize: 4096,
     maxExportBatchSize: 1024,
     scheduledDelayMillis: 2000,
@@ -213,7 +214,7 @@ export function setupTracing(options = {}) {
     detectors: [envDetector, hostDetector, osDetector, processDetector, serviceInstanceIdDetector],
   }).merge(resourceFromAttributes(explicitAttributes));
 
-  tracerProvider = new NodeTracerProvider({
+  tracerProvider = new TracerProvider({
     spanProcessors: [spanProcessor],
     resource,
   });
@@ -247,11 +248,13 @@ export function setupTracing(options = {}) {
     logs.setGlobalLoggerProvider(loggerProvider);
   }
 
-  // Register globally. With no overrides, register() installs the modern
-  // AsyncLocalStorageContextManager and a CompositePropagator of
-  // W3CTraceContext + W3CBaggage - identical propagation to the previous
-  // explicit config, with the recommended context manager.
-  tracerProvider.register();
+  // The same globals NodeTracerProvider.register() installed before sdk-trace
+  // 3.0 removed it. Without the propagator no traceparent crosses a service.
+  trace.setGlobalTracerProvider(tracerProvider);
+  context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+  propagation.setGlobalPropagator(new CompositePropagator({
+    propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+  }));
 
   // Only an outgoing ClientRequest carries .host, so bailing without it keeps
   // server spans out: peer.service must name the remote service being called.

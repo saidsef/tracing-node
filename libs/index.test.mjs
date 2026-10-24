@@ -2,8 +2,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { metrics } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { context, createContextKey, logs, metrics, propagation, trace } from '@opentelemetry/api';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import { LoggerProvider } from '@opentelemetry/sdk-logs';
 import { setupTracing, stopTracing, __resetTracingForTesting, __expressRequestHookForTesting } from './index.mjs';
@@ -66,6 +65,36 @@ describe('setupTracing', () => {
     assert.ok(tracer, 'tracer should be defined');
     assert.strictEqual(typeof globalThis.fetch, 'function', 'global fetch should still be callable');
     assert.ok(before, 'global fetch should exist on a supported runtime');
+  });
+
+  // The trace SDK has no register(), so setupTracing installs the propagator
+  // itself. Without it no outgoing call carries a traceparent.
+  it('should register the W3C trace context and baggage propagators', () => {
+    const tracer = setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    const span = tracer.startSpan('outgoing');
+    const carrier = {};
+    propagation.inject(trace.setSpan(context.active(), span), carrier);
+    span.end();
+    assert.match(carrier.traceparent, /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    assert.deepStrictEqual(propagation.fields().sort(), ['baggage', 'traceparent', 'tracestate']);
+  });
+
+  // The no-op context manager drops the active context at every await, which
+  // detaches each child span from its parent.
+  it('should keep the active context across an await', async () => {
+    setupTracing({
+      serviceName: 'test-service',
+      url: 'http://localhost:4317',
+    });
+    const key = createContextKey('tracing-node-test');
+    const value = await context.with(context.active().setValue(key, 'kept'), async () => {
+      await new Promise(setImmediate);
+      return context.active().getValue(key);
+    });
+    assert.strictEqual(value, 'kept');
   });
 
   it('should accept optional instrumentations', () => {
