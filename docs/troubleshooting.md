@@ -56,6 +56,12 @@ Delta temporality reaching a Prometheus backend produces gaps, not errors. The e
 
 Records still reach the application's own stream in every one of these cases. Logs missing from the backend while present in the container output point here, not at the logger.
 
+## "OTLP logs export failed 3 times in a row"
+
+The collector failed three exports of that signal in a row, and the library has stopped sending it for the cooldown the warning names. Spans, metrics and logs each have their own breaker, so one failing signal leaves the others sending. A later message reports when sending resumed and how many batches were dropped. [Collector failures](architecture.md#collector-failures) covers the timings.
+
+A collector that accepts data but answers after the deadline produces the same warning. Check whether the records still reach the backend before treating the collector as down.
+
 ## The trace stops at a service boundary
 
 A callee starting a new trace instead of continuing the caller's one means the `traceparent` header never arrived. Check that the outgoing call goes through an instrumented client, and that no proxy in between strips the header.
