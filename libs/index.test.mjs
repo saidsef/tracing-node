@@ -2,10 +2,12 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { context, createContextKey, logs, metrics, propagation, trace } from '@opentelemetry/api';
+import { context, createContextKey, diag, DiagConsoleLogger, DiagLogLevel, logs, metrics, propagation, trace } from '@opentelemetry/api';
+import { ExportResultCode } from '@opentelemetry/core';
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import { LoggerProvider } from '@opentelemetry/sdk-logs';
 import { setupTracing, stopTracing, __resetTracingForTesting, __expressRequestHookForTesting } from './index.mjs';
+import { withExportBreaker } from './export-breaker.mjs';
 
 describe('setupTracing', () => {
   // Clear environment and reset tracing state before each test
@@ -346,5 +348,145 @@ describe('ESM loader hook', () => {
   it('should patch ES module imports made after setup', () => {
     assert.strictEqual(httpWrappedWith(undefined), 'true');
     assert.strictEqual(httpWrappedWith('false'), 'false');
+  });
+});
+
+describe('export breaker', () => {
+  const SUCCESS = {code: ExportResultCode.SUCCESS};
+  const FAILED = {code: ExportResultCode.FAILED, error: new Error('14 UNAVAILABLE: No connection established')};
+
+  let clock;
+  let messages;
+
+  // The exporter answers with the queued results in order, and holds the
+  // callback of any export it has no result for, as a collector that hangs does.
+  const fakeExporter = (...results) => ({
+    sent: 0,
+    pending: [],
+    export(items, callback) {
+      this.sent++;
+      const result = results.shift();
+      if (result) callback(result);
+      else this.pending.push(callback);
+    },
+    forceFlush: async () => 'flushed',
+    shutdown: async () => 'shut down',
+  });
+
+  const breakerFor = (exporter, options = {}) => withExportBreaker(exporter, {signal: 'logs', now: () => clock, ...options});
+
+  const send = (breaker) => {
+    let result;
+    breaker.export(['record'], (r) => { result = r; });
+    return result;
+  };
+
+  beforeEach(() => {
+    clock = 0;
+    messages = [];
+    const capture = (level) => (message) => messages.push({level, message});
+    const logger = {error: capture('error'), warn: capture('warn'), info: capture('info'), debug: capture('debug'), verbose: capture('verbose')};
+    diag.setLogger(logger, {logLevel: DiagLogLevel.ALL, suppressOverrideMessage: true});
+  });
+
+  afterEach(() => {
+    diag.setLogger(new DiagConsoleLogger(), {logLevel: DiagLogLevel.INFO, suppressOverrideMessage: true});
+  });
+
+  it('should pass every result through while the collector answers', () => {
+    const exporter = fakeExporter(SUCCESS, FAILED, SUCCESS);
+    const breaker = breakerFor(exporter);
+    assert.deepStrictEqual([send(breaker), send(breaker), send(breaker)], [SUCCESS, FAILED, SUCCESS]);
+    assert.strictEqual(exporter.sent, 3);
+  });
+
+  it('should stop sending after three failures in a row', () => {
+    const exporter = fakeExporter(FAILED, FAILED, FAILED);
+    const breaker = breakerFor(exporter);
+    send(breaker); send(breaker); send(breaker);
+    assert.deepStrictEqual(send(breaker), SUCCESS);
+    assert.deepStrictEqual(send(breaker), SUCCESS);
+    assert.strictEqual(exporter.sent, 3);
+  });
+
+  it('should start the count again after a success', () => {
+    const exporter = fakeExporter(FAILED, FAILED, SUCCESS, FAILED, FAILED, SUCCESS);
+    const breaker = breakerFor(exporter);
+    for (let i = 0; i < 6; i++) send(breaker);
+    assert.strictEqual(exporter.sent, 6);
+  });
+
+  it('should warn once when it opens instead of once per batch', () => {
+    const breaker = breakerFor(fakeExporter(FAILED, FAILED, FAILED));
+    for (let i = 0; i < 10; i++) send(breaker);
+    const warnings = messages.filter(({level, message}) => level === 'warn' && message.startsWith('OTLP'));
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0].message, /OTLP logs export failed 3 times in a row, dropping logs for 30s: 14 UNAVAILABLE/);
+  });
+
+  it('should probe after the cooldown and resume when the probe succeeds', () => {
+    const exporter = fakeExporter(FAILED, FAILED, FAILED, SUCCESS, SUCCESS);
+    const breaker = breakerFor(exporter);
+    send(breaker); send(breaker); send(breaker);
+    send(breaker);
+    clock = 30000;
+    send(breaker);
+    send(breaker);
+    assert.strictEqual(exporter.sent, 5);
+    assert.ok(messages.some(({level, message}) => level === 'info' && message === 'OTLP logs export recovered after 30s, 1 batches dropped.'));
+  });
+
+  it('should double the cooldown when the probe fails', () => {
+    const exporter = fakeExporter(FAILED, FAILED, FAILED, FAILED, SUCCESS);
+    const breaker = breakerFor(exporter);
+    send(breaker); send(breaker); send(breaker);
+    clock = 30000;
+    send(breaker);
+    clock = 89999;
+    send(breaker);
+    assert.strictEqual(exporter.sent, 4);
+    clock = 90000;
+    send(breaker);
+    assert.strictEqual(exporter.sent, 5);
+  });
+
+  it('should stop doubling at the maximum cooldown', () => {
+    const exporter = fakeExporter(...Array(6).fill(FAILED));
+    const breaker = breakerFor(exporter, {baseCooldownMillis: 1000, maxCooldownMillis: 3000});
+    send(breaker); send(breaker); send(breaker);
+    for (const [probeAt, cooldown] of [[1000, 2000], [3000, 3000], [6000, 3000]]) {
+      clock = probeAt;
+      send(breaker);
+      const sent = exporter.sent;
+      clock = probeAt + cooldown - 1;
+      send(breaker);
+      assert.strictEqual(exporter.sent, sent, `still dropping ${cooldown - 1}ms after the probe at ${probeAt}`);
+    }
+  });
+
+  it('should hold back other batches while a probe is in flight', () => {
+    const exporter = fakeExporter(FAILED, FAILED, FAILED);
+    const breaker = breakerFor(exporter);
+    send(breaker); send(breaker); send(breaker);
+    clock = 30000;
+    send(breaker);
+    send(breaker);
+    assert.strictEqual(exporter.sent, 4);
+    assert.strictEqual(exporter.pending.length, 1);
+  });
+
+  // PeriodicExportingMetricReader reads both selectors off its exporter.
+  it('should carry the aggregation selectors of a metric exporter', () => {
+    const exporter = {...fakeExporter(), selectAggregationTemporality: () => 'cumulative', selectAggregation: () => 'default'};
+    const breaker = breakerFor(exporter);
+    assert.strictEqual(breaker.selectAggregationTemporality(), 'cumulative');
+    assert.strictEqual(breaker.selectAggregation(), 'default');
+    assert.strictEqual(breakerFor(fakeExporter()).selectAggregationTemporality, undefined);
+  });
+
+  it('should forward forceFlush and shutdown', async () => {
+    const breaker = breakerFor(fakeExporter());
+    assert.strictEqual(await breaker.forceFlush(), 'flushed');
+    assert.strictEqual(await breaker.shutdown(), 'shut down');
   });
 });

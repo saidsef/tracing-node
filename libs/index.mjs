@@ -17,6 +17,7 @@
 // First, and deliberately: registering the ESM loader hook has to happen before
 // any instrumented module is imported.
 import {esmHookFailure} from './esm-hook.mjs';
+import {withExportBreaker} from './export-breaker.mjs';
 import {AwsInstrumentation} from '@opentelemetry/instrumentation-aws-sdk';
 import {AsyncLocalStorageContextManager} from '@opentelemetry/context-async-hooks';
 import {BatchSpanProcessor, TracerProvider} from '@opentelemetry/sdk-trace';
@@ -190,14 +191,18 @@ export function setupTracing(options = {}) {
     timeoutMillis: 10000,
   };
 
-  const exporter = new OTLPTraceExporter(exportOptions);
+  // Longer than the exporter's own deadline, so a slow collector surfaces as the
+  // gRPC error the breaker counts, not a bare "Timeout" while the call carries on.
+  const processorTimeoutMillis = exportOptions.timeoutMillis + 5000;
+
+  const exporter = withExportBreaker(new OTLPTraceExporter(exportOptions), {signal: 'spans'});
 
   const spanProcessor = new BatchSpanProcessor({
     exporter,
     maxQueueSize: 4096,
     maxExportBatchSize: 1024,
     scheduledDelayMillis: 2000,
-    exportTimeoutMillis: 10000,
+    exportTimeoutMillis: processorTimeoutMillis,
   });
 
   // Explicit attributes (service/container) must win over env detection, so
@@ -224,7 +229,7 @@ export function setupTracing(options = {}) {
       resource,
       readers: [
         new PeriodicExportingMetricReader({
-          exporter: new OTLPMetricExporter({...exportOptions, url: metricsUrl}),
+          exporter: withExportBreaker(new OTLPMetricExporter({...exportOptions, url: metricsUrl}), {signal: 'metrics'}),
           exportIntervalMillis: metricExportIntervalMillis,
         }),
       ],
@@ -237,11 +242,11 @@ export function setupTracing(options = {}) {
       resource,
       processors: [
         new BatchLogRecordProcessor({
-          exporter: new OTLPLogExporter({...exportOptions, url: logsUrl}),
+          exporter: withExportBreaker(new OTLPLogExporter({...exportOptions, url: logsUrl}), {signal: 'logs'}),
           maxQueueSize: 4096,
           maxExportBatchSize: 1024,
           scheduledDelayMillis: 2000,
-          exportTimeoutMillis: 10000,
+          exportTimeoutMillis: processorTimeoutMillis,
         }),
       ],
     });
