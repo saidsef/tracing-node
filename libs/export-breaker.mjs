@@ -25,9 +25,25 @@ export const MAX_COOLDOWN_MILLIS = 300000;
 // them or the reader falls back to its own temporality and aggregation.
 const OPTIONAL_METHODS = ['selectAggregationTemporality', 'selectAggregation'];
 
-// Drops every batch for a cooldown once `failureThreshold` exports in a row have
-// failed, then lets one export through as a probe. A failed probe doubles the
-// cooldown up to `maxCooldownMillis`, and any successful export closes it again.
+/**
+* Wraps an OTLP exporter in a circuit breaker, so that a collector which keeps
+* failing stops being sent to.
+*
+* Once `failureThreshold` exports in a row have failed, the breaker drops every
+* batch for a cooldown, then lets one export through as a probe. A failed probe
+* doubles the cooldown up to `maxCooldownMillis`, and any successful export
+* closes the breaker again.
+*
+* @param {Object} exporter - A span, metric or log record exporter.
+* @param {Object} options - Configuration options for the breaker.
+* @param {string} options.signal - The signal named in the diagnostic messages.
+* @param {number} [options.failureThreshold=3] - Failed exports in a row before the breaker opens.
+* @param {number} [options.baseCooldownMillis=30000] - How long the breaker drops batches after it opens.
+* @param {number} [options.maxCooldownMillis=300000] - The longest cooldown after repeated failed probes.
+* @param {Function} [options.now=Date.now] - The clock, replaceable in tests.
+*
+* @returns {Object} - An exporter with the same interface as the one it wraps.
+*/
 export function withExportBreaker(exporter, {
   signal,
   failureThreshold = FAILURE_THRESHOLD,
