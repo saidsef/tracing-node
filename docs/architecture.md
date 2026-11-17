@@ -27,15 +27,15 @@ flowchart LR
 | Stage | Component | Configuration |
 |-------|-----------|---------------|
 | Provider | `TracerProvider` | Resource from detectors, merged with the explicit service and container attributes |
-| Processor | `BatchSpanProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
-| Exporter | `OTLPTraceExporter` | OTLP over gRPC, `timeoutMillis` 10000, `concurrencyLimit` from the options (default 10) |
+| Processor | `BatchSpanProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 15000 |
+| Exporter | `OTLPTraceExporter` | OTLP over gRPC, `timeoutMillis` 10000, `concurrencyLimit` from the options (default 10), behind the [export breaker](#collector-failures) |
 | Registration | `trace`, `context` and `propagation` APIs | Global tracer provider, context manager and propagators, see [Propagation](#propagation) |
 | Meter provider | `MeterProvider` | Same resource as the tracer provider, registered as the global meter provider |
 | Metric reader | `PeriodicExportingMetricReader` | `exportIntervalMillis` from the options (default 60000) |
-| Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint) |
+| Metric exporter | `OTLPMetricExporter` | OTLP over gRPC, cumulative temporality, `metricsUrl` from the options (default the trace endpoint), behind the [export breaker](#collector-failures) |
 | Logger provider | `LoggerProvider` | Same resource as the tracer provider, registered as the global logger provider |
-| Log processor | `BatchLogRecordProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 10000 |
-| Log exporter | `OTLPLogExporter` | OTLP over gRPC, `logsUrl` from the options (default the trace endpoint) |
+| Log processor | `BatchLogRecordProcessor` | `maxQueueSize` 4096, `maxExportBatchSize` 1024, `scheduledDelayMillis` 2000, `exportTimeoutMillis` 15000 |
+| Log exporter | `OTLPLogExporter` | OTLP over gRPC, `logsUrl` from the options (default the trace endpoint), behind the [export breaker](#collector-failures) |
 
 The processor batches spans instead of exporting them one at a time, which delays a span's arrival in the backend by up to `scheduledDelayMillis` after it ends. [Shutdown](usage.md#shutdown) covers the flush a process needs before it exits.
 
@@ -98,6 +98,14 @@ Only outgoing requests carry `host`, so the HTTP hook returns without setting an
 The provider is held in module scope. `setupTracing` returns early when it is already set, logging a warning and returning a tracer from the existing provider. Repeated initialisation cannot register a second set of instrumentations, or a second exporter, against the same process.
 
 `stopTracing` shuts each provider down in turn, then clears every module scope reference and unregisters the global meter and logger providers, since the API will not replace either while one is in place. A later `setupTracing` call then builds a fresh pipeline. [Shutdown](usage.md#shutdown) covers what each step flushes.
+
+## Collector failures
+
+Each exporter sits behind its own breaker. After three failed exports in a row, the breaker drops every batch of that signal for 30 seconds instead of sending it, then lets one export through as a probe. A failed probe doubles the wait, up to five minutes. A successful export resumes normal sending.
+
+The breaker logs one warning when it starts dropping, with the signal and the last error, and one message when sending resumes, with the number of batches dropped. The processors never retry a failed batch, so dropping a batch loses nothing that a failed export would have kept.
+
+The processors wait 15 seconds for an export, five seconds longer than the exporter's gRPC deadline. A collector that does not answer therefore reports `4 DEADLINE_EXCEEDED` from the exporter. Without that margin, the processor gives up first with a bare `Timeout` and starts the next export while the first call is still open.
 
 ## Diagnostics
 
